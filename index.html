@@ -104,32 +104,20 @@ AFRAME.registerComponent("follow-camera", {
 </div>
 
 <script>
-/* ===== 題庫：老師只要改這裡 =====
-   每一個 QR Code 對應網址 index.html?id=1、?id=2 ...
-   sheep: 畫面上出現幾隻羊；color: 羊的顏色                           */
-const PUZZLES = {
-  1: { q: "How many sheep?",            say: "How many sheep?",            sheep: 3, color: "#ffffff",
-       options: ["two", "three", "four", "five"], answer: "three",
-       clue: { code: "S", text: "第 1 個字母是 S，去找 2 號 QR Code！" } },
-  2: { q: "What color is the sheep?",   say: "What color is the sheep?",   sheep: 1, color: "#ffffff",
-       options: ["red", "blue", "white", "green"], answer: "white",
-       clue: { code: "H", text: "第 2 個字母是 H，去找 3 號 QR Code！" } },
-  3: { q: "s _ e e p",                   say: "Sheep. Which letter is missing?", sheep: 1, color: "#ffffff",
-       options: ["a", "h", "k", "m"], answer: "h",
-       clue: { code: "E", text: "第 3 個字母是 E，去找 4 號 QR Code！" } },
-  4: { q: "The sheep says ___.",        say: "What does the sheep say?",   sheep: 2, color: "#ffffff",
-       options: ["moo", "woof", "baa", "meow"], answer: "baa",
-       clue: { code: "E", text: "第 4 個字母是 E，去找 5 號 QR Code！" } },
-  5: { q: "Happy New ___!",              say: "Happy New... what?",         sheep: 1, color: "#ffffff",
-       options: ["Year", "Cat", "Bus", "Hat"], answer: "Year",
-       clue: { code: "P", text: "第 5 個字母是 P，去找 6 號 QR Code！" } },
-  6: { q: "🧶 What can we make with wool?", say: "What can we make with wool? A sweater? A cake? A car? A book?", sheep: 1, color: "#ffffff",
-       options: ["🧥 a sweater", "🎂 a cake", "🚗 a car", "📖 a book"], answer: "🧥 a sweater",
-       clue: { code: "🧶", text: "最後一關完成！把 5 個字母拼起來是什麼？告訴老師！" } }
-};
+/* ===== 題目放在 questions.json，請用 admin.html（老師後台）新增／修改／刪除 =====
+   每一個 QR Code 對應網址 index.html?id=題號                                         */
+const params = new URLSearchParams(location.search);
+const id = params.get("id") || "1";
+let P = null;
 
-const id = new URLSearchParams(location.search).get("id") || "1";
-const P = PUZZLES[id] || PUZZLES[1];
+async function loadQuestions() {
+  // 預覽模式：老師在後台按「預覽」時，用還沒發布的草稿
+  if (params.get("preview")) {
+    try { const d = JSON.parse(localStorage.getItem("lambyDraft") || "null"); if (d) return d; } catch (e) {}
+  }
+  const r = await fetch("questions.json?t=" + Date.now(), { cache: "no-store" });
+  return r.json();
+}
 
 /* ---------- 建立小羊 ---------- */
 function makeSheep(x, color, isHost, flip) {
@@ -146,6 +134,7 @@ function makeSheep(x, color, isHost, flip) {
   s.appendChild(img);
   return s;
 }
+function setup() {
 const group = document.getElementById("sheepGroup");
 const gap = 1.6, n = P.sheep;
 const hostIndex = Math.floor((n - 1) / 2);   // 中間那隻是小羊老師
@@ -172,6 +161,7 @@ P.options.forEach(o => {
   };
   optsEl.appendChild(b);
 });
+}
 
 function showClue() {
   document.getElementById("clueCode").textContent = P.clue.code;
@@ -219,8 +209,18 @@ function hostDo(move) {
   if (move === "shake") h.setAttribute("animation__act", "property: rotation; from: 0 0 -12; to: 0 0 12; dir: alternate; loop: 4; dur: 120; easing: linear");
   setTimeout(() => { h.removeAttribute("animation__act"); h.setAttribute("rotation", "0 0 0"); h.setAttribute("scale", "1 1 1"); acting = false; }, 1000);
 }
-function askQuestion() { talk(P.q, P.say); }
+function askQuestion() { talk(P.q, P.say || P.q); }
 document.getElementById("speak").onclick = askQuestion;
+
+/* ---------- 讀取題目 ---------- */
+const startBtn = document.getElementById("startBtn"), errEl = document.getElementById("err");
+startBtn.disabled = true; startBtn.textContent = "載入中…";
+loadQuestions().then(list => {
+  P = list.find(x => String(x.id) === String(id));
+  if (!P) { startBtn.style.display = "none"; errEl.textContent = "找不到第 " + id + " 題，請告訴老師。"; return; }
+  setup();
+  startBtn.disabled = false; startBtn.textContent = "開始 Start";
+}).catch(() => { startBtn.style.display = "none"; errEl.textContent = "題目載入失敗，請檢查網路後重新整理。"; });
 
 /* ---------- 開啟後鏡頭（需要 HTTPS） ---------- */
 document.getElementById("startBtn").onclick = async () => {

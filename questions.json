@@ -1,0 +1,104 @@
+[
+  {
+    "id": 1,
+    "q": "How many sheep?",
+    "say": "How many sheep?",
+    "sheep": 3,
+    "options": [
+      "two",
+      "three",
+      "four",
+      "five"
+    ],
+    "answer": "three",
+    "clue": {
+      "code": "S",
+      "text": "第 1 個字母是 S，去找 2 號 QR Code！"
+    }
+  },
+  {
+    "id": 2,
+    "q": "What color is the sheep?",
+    "say": "What color is the sheep?",
+    "sheep": 1,
+    "options": [
+      "red",
+      "blue",
+      "white",
+      "green"
+    ],
+    "answer": "white",
+    "clue": {
+      "code": "H",
+      "text": "第 2 個字母是 H，去找 3 號 QR Code！"
+    }
+  },
+  {
+    "id": 3,
+    "q": "s _ e e p",
+    "say": "Sheep. Which letter is missing?",
+    "sheep": 1,
+    "options": [
+      "a",
+      "h",
+      "k",
+      "m"
+    ],
+    "answer": "h",
+    "clue": {
+      "code": "E",
+      "text": "第 3 個字母是 E，去找 4 號 QR Code！"
+    }
+  },
+  {
+    "id": 4,
+    "q": "The sheep says ___.",
+    "say": "What does the sheep say?",
+    "sheep": 2,
+    "options": [
+      "moo",
+      "woof",
+      "baa",
+      "meow"
+    ],
+    "answer": "baa",
+    "clue": {
+      "code": "E",
+      "text": "第 4 個字母是 E，去找 5 號 QR Code！"
+    }
+  },
+  {
+    "id": 5,
+    "q": "Happy New ___!",
+    "say": "Happy New... what?",
+    "sheep": 1,
+    "options": [
+      "Year",
+      "Cat",
+      "Bus",
+      "Hat"
+    ],
+    "answer": "Year",
+    "clue": {
+      "code": "P",
+      "text": "第 5 個字母是 P，去找 6 號 QR Code！"
+    }
+  },
+  {
+    "id": 6,
+    "q": "🧶 What can we make with wool?",
+    "say": "What can we make with wool? A sweater? A cake? A car? A book?",
+    "sheep": 1,
+    "options": [
+      "🧥 a sweater",
+      "🎂 a cake",
+      "🚗 a car",
+      "📖 a book"
+    ],
+    "answer": "🧥 a sweater",
+    "clue": {
+      "code": "🧶",
+      "text": "最後一關完成！把 5 個字母拼起來是什麼？告訴老師！"
+    }
+  }
+]

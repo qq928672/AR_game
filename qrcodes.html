@@ -6,35 +6,44 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   body { font-family: "Microsoft JhengHei", sans-serif; padding:20px; }
-  .bar { margin-bottom:20px; }
-  .bar input { width:420px; font-size:16px; padding:6px; }
+  .bar { margin-bottom:20px; line-height:2.2; }
+  .bar input { font-size:16px; padding:6px; }
   .grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:30px; }
   .card { border:3px dashed #ff7043; border-radius:16px; padding:20px; text-align:center; page-break-inside:avoid; }
   .card h2 { margin:0 0 10px; color:#e65100; }
+  .card img.lamby { width:60px; vertical-align:middle; }
   .card .qr { display:inline-block; }
+  .card .t { color:#999; font-size:13px; }
   @media print { .bar { display:none; } }
 </style>
 </head>
 <body>
 <div class="bar">
-  遊戲網址：<input id="base" placeholder="https://你的帳號.github.io/AR/index.html">
-  題數：<input id="count" type="number" value="6" style="width:60px">
+  遊戲網址：<input id="base" style="width:420px">
+  只印這些題號：<input id="only" placeholder="留白＝全部，例如 7,8" style="width:160px">
   <button onclick="build()">產生</button>
   <button onclick="print()">列印</button>
+  <span id="info" style="color:#888"></span>
 </div>
 <div class="grid" id="grid"></div>
 <script>
+let questions = [];
+document.getElementById("base").value = location.href.replace(/qrcodes\.html.*$/, "index.html");
+fetch("questions.json?t=" + Date.now(), { cache: "no-store" }).then(r => r.json()).then(q => { questions = q; build(); })
+  .catch(() => document.getElementById("info").textContent = "讀不到 questions.json");
 function build() {
   const base = document.getElementById("base").value.trim();
-  const n = +document.getElementById("count").value;
-  if (!base) { alert("請先輸入遊戲網址"); return; }
+  const only = document.getElementById("only").value.split(/[,，\s]+/).filter(Boolean);
+  const list = only.length ? questions.filter(q => only.includes(String(q.id))) : questions;
+  document.getElementById("info").textContent = "共 " + list.length + " 張";
   const grid = document.getElementById("grid"); grid.innerHTML = "";
-  for (let i = 1; i <= n; i++) {
+  list.forEach(q => {
     const c = document.createElement("div"); c.className = "card";
-    c.innerHTML = `<h2>🐑 Puzzle ${i}</h2><div class="qr"></div><p>用平板掃我！</p>`;
+    c.innerHTML = `<h2><img class="lamby" src="lamby.png" alt=""> Puzzle ${q.id}</h2><div class="qr"></div><p>用平板掃我！</p><div class="t"></div>`;
+    c.querySelector(".t").textContent = q.q;
     grid.appendChild(c);
-    new QRCode(c.querySelector(".qr"), { text: `${base}?id=${i}`, width: 220, height: 220 });
-  }
+    new QRCode(c.querySelector(".qr"), { text: `${base}?id=${q.id}`, width: 220, height: 220 });
+  });
 }
 </script>
 </body>
