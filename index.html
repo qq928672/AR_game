@@ -40,6 +40,11 @@
   #bubble::after { content:""; position:absolute; left:50%; bottom:-18px; margin-left:-14px;
             border:14px solid transparent; border-top:18px solid #fff; border-bottom:0; }
   #bubble .who { font-size:16px; color:#e65100; font-weight:bold; }
+  /* 圖片固定大小：放在固定的框裡，等比例縮放，不會撐大畫面 */
+  #bubble img { display:none; width:100%; height:min(20vh, 160px); object-fit:contain; border-radius:12px; margin:8px auto 0; }
+  #bubble img.has { display:block; }
+  .opt img { display:block; width:100%; height:min(11vh, 90px); margin:0 auto 4px; object-fit:contain; }
+  .opt.pic { padding:8px; }
   #bubble .say { font-size:clamp(22px, 6.5vw, 30px); font-weight:bold; line-height:1.25; margin-top:2px; }
 </style>
 <script>
@@ -73,7 +78,7 @@ AFRAME.registerComponent("follow-camera", {
 
 <div id="title"></div>
 <button id="speak" aria-label="念題目">🔊</button>
-<div id="bubble"><div class="who">🐑 Lamby 小羊老師</div><div class="say" id="bubbleText"></div></div>
+<div id="bubble"><div class="who">🐑 Lamby 小羊老師</div><div class="say" id="bubbleText"></div><img id="bubbleImg" alt=""></div>
 
 <!-- 3D 場景：小羊（用基本幾何組成，可換成 .glb 模型） -->
 <a-scene embedded vr-mode-ui="enabled:false" xr-mode-ui="enabled:false" renderer="alpha:true; antialias:true"
@@ -143,12 +148,17 @@ group.setAttribute("scale", n > 2 ? "0.42 0.42 0.42" : (n == 2 ? "0.75 0.75 0.75
 
 /* ---------- 題目與選項 ---------- */
 document.getElementById("title").textContent = "🐑 Puzzle " + id;
+if (P.image) document.getElementById("bubbleImg").src = P.image;
 const optsEl = document.getElementById("opts");
-P.options.forEach(o => {
+const answerIndex = P.answerIndex ?? P.options.indexOf(P.answer);
+P.options.forEach((o, k) => {
   const b = document.createElement("button");
-  b.className = "opt"; b.textContent = o;
+  b.className = "opt";
+  const im = (P.optionImages || [])[k];
+  if (im) { const i = document.createElement("img"); i.src = im; i.alt = o; b.appendChild(i); b.classList.add("pic"); }
+  if (o) b.appendChild(document.createTextNode(o));
   b.onclick = () => {
-    if (o === P.answer) {
+    if (k === answerIndex) {
       b.classList.add("right");
       hostDo("jump");
       talk("Yay! Great job! 🎉", "Yay! Great job!");
@@ -177,6 +187,7 @@ function showClue() {
 const bubble = document.getElementById("bubble"), bubbleText = document.getElementById("bubbleText");
 function showBubble(text) {
   bubbleText.textContent = text;
+  document.getElementById("bubbleImg").classList.toggle("has", !!(P && P.image && text === P.q));   // 題目圖片只在出題時顯示
   bubble.classList.remove("show"); void bubble.offsetWidth; bubble.classList.add("show");
 }
 let mouthTimer = null, acting = false;
