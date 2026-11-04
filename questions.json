@@ -15,5 +15,25 @@
       "code": "🧶",
       "text": "快去找其他關卡的線索"
     }
+  },
+  {
+    "id": 2,
+    "q": "How many sheep?",
+    "say": "How many sheep?",
+    "sheep": 2,
+    "image": "",
+    "options": [
+      "One",
+      "Two",
+      "Three",
+      "Four"
+    ],
+    "optionImages": [],
+    "answerIndex": 0,
+    "answer": "One",
+    "clue": {
+      "code": "V",
+      "text": ""
+    }
   }
 ]
