@@ -64,7 +64,7 @@ AFRAME.registerComponent("follow-camera", {
 <video id="cam" autoplay playsinline muted></video>
 
 <div id="start">
-  <div style="font-size:90px">🐑</div>
+  <img src="lamby.png" alt="Lamby" style="width:min(60vw,260px)">
   <h1>Hi! I'm Lamby!</h1>
   <p style="font-size:20px">我是小羊老師，來挑戰我的英文題目吧！</p>
   <button id="startBtn">開始 Start</button>
@@ -78,6 +78,7 @@ AFRAME.registerComponent("follow-camera", {
 <!-- 3D 場景：小羊（用基本幾何組成，可換成 .glb 模型） -->
 <a-scene embedded vr-mode-ui="enabled:false" xr-mode-ui="enabled:false" renderer="alpha:true; antialias:true"
          device-orientation-permission-ui="enabled:true" loading-screen="enabled:false">
+  <a-assets><img id="lambyImg" src="lamby.png" crossorigin="anonymous"></a-assets>
   <a-entity id="cam3d" camera look-controls="magicWindowTrackingEnabled:true; touchEnabled:false" position="0 1.6 0"></a-entity>
   <a-entity light="type:ambient; intensity:0.8"></a-entity>
   <a-entity light="type:directional; intensity:0.8" position="1 3 2"></a-entity>
@@ -131,57 +132,25 @@ const id = new URLSearchParams(location.search).get("id") || "1";
 const P = PUZZLES[id] || PUZZLES[1];
 
 /* ---------- 建立小羊 ---------- */
-function makeSheep(x, color, isHost) {
+function makeSheep(x, color, isHost, flip) {
+  // 外層負責左右位置和上下跳；內層是小羊圖片（說話、跳、搖頭的動畫都做在內層）
   const s = document.createElement("a-entity");
   s.setAttribute("position", `${x} 0 0`);
-  s.setAttribute("animation", "property: position; to: " + x + " 0.25 0; dir: alternate; loop: true; dur: 700; easing: easeInOutSine");
-  const wool = [[0,0,0,.45],[.35,.1,0,.32],[-.35,.1,0,.32],[0,.25,0,.35],[.15,0,.25,.3],[-.15,0,.25,.3],[0,0,-.25,.3]];
-  wool.forEach(([a,b,c,r]) => {
-    const e = document.createElement("a-sphere");
-    e.setAttribute("position", `${a} ${b} ${c}`); e.setAttribute("radius", r);
-    e.setAttribute("color", color); e.setAttribute("segments-width", 12); e.setAttribute("segments-height", 8);
-    s.appendChild(e);
-  });
-  const head = document.createElement("a-sphere");
-  head.setAttribute("position", "0 .2 .55"); head.setAttribute("radius", .22); head.setAttribute("color", "#4e342e");
-  s.appendChild(head);
-  [[-.08,.27,.74],[.08,.27,.74]].forEach(p => {
-    const eye = document.createElement("a-sphere");
-    eye.setAttribute("position", p.join(" ")); eye.setAttribute("radius", .04); eye.setAttribute("color", "#fff");
-    s.appendChild(eye);
-  });
-  [[-.2,-.5,.15],[.2,-.5,.15],[-.2,-.5,-.15],[.2,-.5,-.15]].forEach(p => {
-    const leg = document.createElement("a-cylinder");
-    leg.setAttribute("position", p.join(" ")); leg.setAttribute("radius", .06); leg.setAttribute("height", .4);
-    leg.setAttribute("color", "#4e342e");
-    s.appendChild(leg);
-  });
-  if (isHost) {
-    s.id = "host";
-    // 嘴巴（說話時會一開一合）
-    const mouth = document.createElement("a-sphere");
-    mouth.id = "mouth"; mouth.setAttribute("position", "0 .1 .74"); mouth.setAttribute("radius", .07);
-    mouth.setAttribute("scale", "1 .25 .5"); mouth.setAttribute("color", "#c62828");
-    s.appendChild(mouth);
-    // 新年紅色蝴蝶結
-    [[-.13, 20], [.13, -20]].forEach(([bx, rz]) => {
-      const w = document.createElement("a-cone");
-      w.setAttribute("position", `${bx} .5 .5`); w.setAttribute("rotation", `0 0 ${bx < 0 ? 90 : -90}`);
-      w.setAttribute("radius-bottom", .09); w.setAttribute("radius-top", 0); w.setAttribute("height", .2);
-      w.setAttribute("color", "#e53935"); s.appendChild(w);
-    });
-    const knot = document.createElement("a-sphere");
-    knot.setAttribute("position", "0 .5 .5"); knot.setAttribute("radius", .05); knot.setAttribute("color", "#ffca28");
-    s.appendChild(knot);
-  }
+  s.setAttribute("animation", "property: position; to: " + x + " 0.15 0; dir: alternate; loop: true; dur: 700; easing: easeInOutSine");
+  const img = document.createElement("a-image");
+  img.setAttribute("src", "#lambyImg");
+  img.setAttribute("width", 1.6); img.setAttribute("height", 1.6 * 567 / 640);
+  img.setAttribute("material", "transparent: true; alphaTest: 0.05; shader: flat");
+  if (flip) img.setAttribute("scale", "-1 1 1");
+  if (isHost) img.id = "host";
+  s.appendChild(img);
   return s;
 }
 const group = document.getElementById("sheepGroup");
-const gap = 1.4, n = P.sheep;
+const gap = 1.6, n = P.sheep;
 const hostIndex = Math.floor((n - 1) / 2);   // 中間那隻是小羊老師
-for (let i = 0; i < n; i++) group.appendChild(makeSheep((i - (n - 1) / 2) * gap, P.color, i === hostIndex));
-group.setAttribute("scale", n > 2 ? "0.5 0.5 0.5" : (n == 2 ? "0.75 0.75 0.75" : "1 1 1"));
-group.setAttribute("animation__turn", "property: rotation; from: 0 -20 0; to: 0 20 0; dir: alternate; loop: true; dur: 3000; easing: easeInOutSine");
+for (let i = 0; i < n; i++) group.appendChild(makeSheep((i - (n - 1) / 2) * gap, P.color, i === hostIndex, i > hostIndex));
+group.setAttribute("scale", n > 2 ? "0.42 0.42 0.42" : (n == 2 ? "0.75 0.75 0.75" : "1 1 1"));
 
 /* ---------- 題目與選項 ---------- */
 document.getElementById("title").textContent = "🐑 Puzzle " + id;
@@ -220,13 +189,15 @@ function showBubble(text) {
   bubbleText.textContent = text;
   bubble.classList.remove("show"); void bubble.offsetWidth; bubble.classList.add("show");
 }
-let mouthTimer = null;
+let mouthTimer = null, acting = false;
 function mouthMove(on) {
-  const m = document.getElementById("mouth"); if (!m) return;
+  // 說話時小羊會一伸一縮，看起來像在講話
+  const h = document.getElementById("host"); if (!h) return;
   clearInterval(mouthTimer);
-  if (!on) { m.setAttribute("scale", "1 .25 .5"); return; }
-  let open = false;
-  mouthTimer = setInterval(() => { open = !open; m.setAttribute("scale", open ? "1 .9 .5" : "1 .25 .5"); }, 140);
+  const sx = h.getAttribute("scale").x < 0 ? -1 : 1;
+  if (!on || acting) { if (!acting) h.setAttribute("scale", `${sx} 1 1`); return; }
+  let up = false;
+  mouthTimer = setInterval(() => { up = !up; h.setAttribute("scale", up ? `${sx * 0.96} 1.07 1` : `${sx} 1 1`); }, 160);
 }
 function talk(bubbleWords, voiceWords, onDone) {
   showBubble(bubbleWords);
@@ -243,9 +214,10 @@ function talk(bubbleWords, voiceWords, onDone) {
 }
 function hostDo(move) {
   const h = document.getElementById("host"); if (!h) return;
+  clearInterval(mouthTimer); acting = true;
   if (move === "jump")  h.setAttribute("animation__act", "property: scale; from: 1 1 1; to: 1.25 1.25 1.25; dir: alternate; loop: 4; dur: 200; easing: easeOutQuad");
-  if (move === "shake") h.setAttribute("animation__act", "property: rotation; from: 0 -25 0; to: 0 25 0; dir: alternate; loop: 4; dur: 120; easing: linear");
-  setTimeout(() => { h.removeAttribute("animation__act"); h.setAttribute("rotation", "0 0 0"); h.setAttribute("scale", "1 1 1"); }, 1000);
+  if (move === "shake") h.setAttribute("animation__act", "property: rotation; from: 0 0 -12; to: 0 0 12; dir: alternate; loop: 4; dur: 120; easing: linear");
+  setTimeout(() => { h.removeAttribute("animation__act"); h.setAttribute("rotation", "0 0 0"); h.setAttribute("scale", "1 1 1"); acting = false; }, 1000);
 }
 function askQuestion() { talk(P.q, P.say); }
 document.getElementById("speak").onclick = askQuestion;
