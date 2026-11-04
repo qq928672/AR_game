@@ -65,6 +65,7 @@
   <img src="lamby.png" alt="">
   <h1>Lamby 老師後台<span class="badge" id="dirty">尚未發布</span></h1>
   <button class="primary" onclick="openEditor(null)">＋ 新增題目</button>
+  <button onclick="compact()">🔢 重新編號</button>
   <button onclick="openQR()">🖨 列印 QR Code</button>
   <button class="green" id="publishBtn" onclick="publish()">發布到網站</button>
 </header>
@@ -110,6 +111,9 @@
 <div id="editor" onclick="if(event.target===this)closeEditor()">
   <div class="panel">
     <h2 id="edTitle">新增題目</h2>
+
+    <label>題號 <small>QR Code 會對應這個號碼；改題號後要重印 QR Code</small></label>
+    <input type="text" id="f_id" inputmode="numeric" style="width:120px">
 
     <label>題目 <small>畫面上 Lamby 對話框顯示的文字，可加 emoji</small></label>
     <input type="text" id="f_q" placeholder="例如：How many sheep?">
@@ -187,7 +191,7 @@ async function load() {
       questions = await r.json(); sha = null;
       msg("info", "目前是唯讀模式：可以編輯和預覽，但要設定發布金鑰才能發布。");
     }
-    setDirty(false); render();
+    sortQ(); setDirty(false); render();
   } catch (e) { msg("err", "讀取失敗：" + e.message); }
 }
 
@@ -206,8 +210,8 @@ function render() {
         <div class="act">
           <button onclick="openEditor(${q.id})">✏️ 編輯</button>
           <button onclick="preview(${q.id})">👀 預覽</button>
-          <button onclick="move(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button>
-          <button onclick="move(${i},1)" ${i === questions.length - 1 ? "disabled" : ""}>↓</button>
+          <button onclick="move(${i},-1)" ${i === 0 ? "disabled" : ""} title="和上一題交換題號">↑</button>
+          <button onclick="move(${i},1)" ${i === questions.length - 1 ? "disabled" : ""} title="和下一題交換題號">↓</button>
           <button onclick="openQR(${q.id})">🖨 印這題</button>
           <button class="danger" onclick="removeQ(${q.id})">🗑 刪除</button>
         </div>
@@ -221,11 +225,46 @@ function openQR(only) {
   store("lambyDraft", JSON.stringify(questions));
   window.open("qrcodes.html?draft=1" + (only ? "&only=" + only : ""), "_blank");
 }
-function move(i, d) { const [x] = questions.splice(i, 1); questions.splice(i + d, 0, x); setDirty(true); render(); }
+/* ---------- 題號：交換、遞補、重新編號 ---------- */
+// map = { 舊題號: 新題號 }。會一起更新所有線索裡的「N 號」
+function applyIdMap(map, note) {
+  const changed = Object.keys(map).filter(k => +k !== map[k]);
+  if (!changed.length) { msg("info", "題號沒有變動。"); return; }
+  questions.forEach(q => {
+    if (q.clue?.text) q.clue.text = q.clue.text.replace(/(\d+)(\s*號)/g, (m, n, tail) => (n in map ? map[n] : n) + tail);
+  });
+  questions.forEach(q => { if (q.id in map) q.id = map[q.id]; });
+  sortQ(); setDirty(true); render();
+  const newIds = changed.map(k => map[k]).sort((a, b) => a - b);
+  msg("err", (note ? note + " " : "") + `題號已更新：${changed.map(k => k + "→" + map[k]).join("、")}。線索裡的「N 號」也已自動更新。`
+      + `⚠️ 發布後請重印第 ${newIds.join("、")} 題的 QR Code（舊的 QR Code 會對應到不同題目）。`);
+  showReprint(newIds);
+}
+function showReprint(ids) {
+  const b = document.createElement("button"); b.className = "primary"; b.style.marginLeft = "10px";
+  b.textContent = "🖨 印這些 QR Code"; b.onclick = () => openQR(ids.join(","));
+  $("status").appendChild(b);
+}
+const sortQ = () => questions.sort((a, b) => a.id - b.id);
+function move(i, d) {
+  const a = questions[i], b = questions[i + d];
+  applyIdMap({ [a.id]: b.id, [b.id]: a.id });
+}
+function compact() {
+  const map = {}; questions.forEach((q, i) => map[q.id] = i + 1);
+  if (!Object.keys(map).some(k => +k !== map[k])) return msg("ok", "題號已經是 1 到 " + questions.length + " 連續的，不需要重新編號。");
+  if (!confirm("要把題號重新編成 1、2、3…連續的號碼嗎？\n有變動的題目要重印 QR Code。")) return;
+  applyIdMap(map);
+}
 function removeQ(id) {
   const q = questions.find(x => x.id === id);
   if (!confirm(`確定要刪除第 ${id} 題「${q.q}」嗎？`)) return;
   questions = questions.filter(x => x.id !== id); setDirty(true); render();
+  const later = questions.filter(x => x.id > id);
+  if (later.length && confirm(`要讓後面的題目自動往前遞補嗎？\n（第 ${later.map(x => x.id).join("、")} 題會各減 1，這些題目要重印 QR Code）`)) {
+    const map = {}; later.forEach(x => map[x.id] = x.id - 1);
+    return applyIdMap(map, `已刪除第 ${id} 題（還沒發布）。`);
+  }
   // 檢查有沒有其他題目的線索還叫學生去找這一題
   const refs = questions.filter(x => new RegExp("(^|[^0-9])" + id + "\\s*號").test(x.clue?.text || "")).map(x => x.id);
   msg(refs.length ? "err" : "info", `已刪除第 ${id} 題（還沒發布）。已經印好的第 ${id} 號 QR Code 會失效，請記得收回。`
@@ -245,6 +284,7 @@ function openEditor(id) {
   const q = id == null ? { q: "", say: "", sheep: 1, options: ["", "", "", ""], answer: "", clue: { code: "", text: "" } }
                        : questions.find(x => x.id === id);
   $("edTitle").textContent = id == null ? "新增題目" : `編輯第 ${id} 題`;
+  $("f_id").value = id == null ? questions.reduce((m, x) => Math.max(m, x.id), 0) + 1 : id;
   $("f_q").value = q.q; $("f_say").value = q.say === q.q ? "" : (q.say || "");
   $("f_sheep").value = String(q.sheep || 1);
   const box = $("f_opts"); box.innerHTML = "";
@@ -263,14 +303,19 @@ function saveEditor() {
   if (opts.length < 2) return alert("至少要有 2 個選項。");
   if (new Set(opts).size !== opts.length) return alert("選項不能重複。");
   if (!picked.length) return alert("請點選項左邊的圓圈，選出正確答案。");
+  const newId = parseInt($("f_id").value, 10);
+  if (!(newId >= 1) || String(newId) !== $("f_id").value.trim()) return alert("題號要是 1 以上的整數。");
+  if (questions.some(x => x.id === newId && x.id !== editingId)) return alert(`第 ${newId} 題已經存在，請換一個題號，或先用 ↑↓ 交換。`);
   const data = { q: qText, say: $("f_say").value.trim() || qText, sheep: +$("f_sheep").value,
                  options: opts, answer: picked[0], clue: { code: $("f_code").value.trim(), text: $("f_text").value.trim() } };
   if (editingId == null) {
-    const newId = questions.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-    questions.push({ id: newId, ...data });
+    questions.push({ id: newId, ...data }); sortQ();
     msg("info", `已新增第 ${newId} 題（還沒發布）。發布後記得印第 ${newId} 號 QR Code。`);
+    showReprint([newId]);
   } else {
     Object.assign(questions.find(x => x.id === editingId), data);
+    closeEditor();
+    if (newId !== editingId) return applyIdMap({ [editingId]: newId }, `已修改第 ${editingId} 題（還沒發布）。`);
     msg("info", `已修改第 ${editingId} 題（還沒發布）。`);
   }
   setDirty(true); render(); closeEditor();
