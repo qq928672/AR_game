@@ -4,24 +4,56 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>羊年 AR 英文謎題</title>
-<script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-v1.5.0.min.js"></script>
 <style>
   html, body { margin:0; height:100%; overflow:hidden; font-family: "Arial Rounded MT Bold", "Microsoft JhengHei", sans-serif; background:#000; }
   #cam { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
-  a-scene { position:fixed !important; inset:0; z-index:1; }
-  #ui { position:fixed; left:0; right:0; bottom:0; z-index:2; padding:16px; box-sizing:border-box;
+
+  /* 由上到下排版：上方列 → 題目對話框 → 小羊 → 選項，彼此不會重疊 */
+  #game { position:fixed; inset:0; z-index:1; display:flex; flex-direction:column; height:100vh; height:100dvh; }
+  #top { flex:none; display:flex; align-items:center; justify-content:space-between; padding:12px 16px 4px; }
+  #title { color:#fff; font-size:18px; text-shadow:0 2px 4px #000; }
+  #speak { font-size:28px; border:0; border-radius:50%; width:56px; height:56px; background:#ffd54f; box-shadow:0 3px 6px rgba(0,0,0,.4); }
+
+  /* 小羊老師的對話框 */
+  #bubble { flex:none; position:relative; margin:6px auto 22px; width:min(88vw, 460px); box-sizing:border-box;
+            background:#fff; color:#333; border-radius:24px; padding:12px 18px; box-shadow:0 6px 16px rgba(0,0,0,.35);
+            text-align:center; transform:scale(0); transform-origin:50% 100%; transition:transform .25s cubic-bezier(.3,1.6,.6,1); }
+  #bubble.show { transform:scale(1); }
+  #bubble::after { content:""; position:absolute; left:50%; bottom:-18px; margin-left:-14px;
+            border:14px solid transparent; border-top:18px solid #fff; border-bottom:0; }
+  #bubble .who { font-size:16px; color:#e65100; font-weight:bold; }
+  #bubble .say { font-size:clamp(22px, 6.5vw, 30px); font-weight:bold; line-height:1.25; margin-top:2px; }
+  /* 圖片固定大小：放在固定的框裡，等比例縮放，不會撐大畫面 */
+  #bubble img { display:none; width:100%; height:min(20vh, 160px); object-fit:contain; border-radius:12px; margin:8px auto 0; }
+  #bubble img.has { display:block; }
+
+  /* 小羊區：自動填滿剩下的空間，小羊永遠置中 */
+  #stage { flex:1 1 0; min-height:0; position:relative; }
+  #sheep { position:absolute; inset:9% 12px 3%; display:flex; align-items:center; justify-content:center; gap:4px; }
+  .sheepbox { flex:0 1 auto; height:100%; max-height:280px; display:flex; align-items:center; justify-content:center;
+              animation:bob .7s ease-in-out infinite alternate; }
+  .sheepbox img { max-height:100%; max-width:100%; object-fit:contain; display:block; }
+  .sheepbox.flip img { transform:scaleX(-1); }
+  @keyframes bob { to { transform:translateY(-6%); } }
+  #host.talk  { animation:talk .32s ease-in-out infinite alternate; transform-origin:50% 100%; }
+  #host.jump  { animation:jump .4s ease-out 2; transform-origin:50% 100%; }
+  #host.shake { animation:shakehead .24s linear 4; transform-origin:50% 100%; }
+  @keyframes talk { to { transform:scale(.96, 1.07); } }
+  @keyframes jump { 50% { transform:scale(1.2) translateY(-8%); } }
+  @keyframes shakehead { 25% { transform:rotate(-10deg); } 75% { transform:rotate(10deg); } }
+
+  #ui { flex:none; padding:12px 16px 16px; box-sizing:border-box;
         background:linear-gradient(transparent, rgba(0,0,0,.65) 25%); color:#fff; text-align:center; }
-  #q { font-size:28px; font-weight:bold; margin:8px 0 14px; text-shadow:0 2px 4px #000; }
   #opts { display:grid; grid-auto-rows:1fr; grid-template-columns:1fr 1fr; gap:12px; }
   .opt { font-size:clamp(18px, 5.5vw, 26px); padding:16px 8px; border:0; border-radius:18px; background:#fff; color:#333;
          box-shadow:0 4px 0 #bbb; font-weight:bold; font-family:inherit; }
   .opt:active { transform:translateY(3px); box-shadow:0 1px 0 #bbb; }
   .opt.wrong { background:#ffb3b3; animation:shake .4s; }
   .opt.right { background:#9be89b; }
+  .opt img { display:block; width:100%; height:min(11vh, 90px); margin:0 auto 4px; object-fit:contain; }
+  .opt.pic { padding:8px; }
   @keyframes shake { 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
-  #speak { position:fixed; top:16px; right:16px; z-index:3; font-size:28px; border:0; border-radius:50%;
-           width:56px; height:56px; background:#ffd54f; box-shadow:0 3px 6px rgba(0,0,0,.4); }
-  #title { position:fixed; top:16px; left:16px; z-index:3; color:#fff; font-size:18px; text-shadow:0 2px 4px #000; }
+
   #start, #clue { position:fixed; inset:0; z-index:5; display:flex; flex-direction:column; align-items:center;
                   justify-content:center; background:#fff8e1; text-align:center; padding:24px; box-sizing:border-box; }
   #start h1 { font-size:34px; color:#e65100; margin:0 0 8px; }
@@ -31,38 +63,7 @@
   #clue .card { background:#fff; border:4px dashed #ff7043; border-radius:24px; padding:24px; max-width:420px; }
   #clue .code { font-size:64px; font-weight:bold; color:#e65100; letter-spacing:6px; }
   #clue p { font-size:22px; color:#333; }
-  /* 小羊老師的對話框 */
-  #bubble { position:fixed; top:84px; left:50%; transform:translateX(-50%) scale(0); z-index:3;
-            width:min(88vw, 460px); box-sizing:border-box; background:#fff; color:#333; border-radius:24px;
-            padding:14px 18px; box-shadow:0 6px 16px rgba(0,0,0,.35); text-align:center;
-            transition:transform .25s cubic-bezier(.3,1.6,.6,1); }
-  #bubble.show { transform:translateX(-50%) scale(1); }
-  #bubble::after { content:""; position:absolute; left:50%; bottom:-18px; margin-left:-14px;
-            border:14px solid transparent; border-top:18px solid #fff; border-bottom:0; }
-  #bubble .who { font-size:16px; color:#e65100; font-weight:bold; }
-  /* 圖片固定大小：放在固定的框裡，等比例縮放，不會撐大畫面 */
-  #bubble img { display:none; width:100%; height:min(20vh, 160px); object-fit:contain; border-radius:12px; margin:8px auto 0; }
-  #bubble img.has { display:block; }
-  .opt img { display:block; width:100%; height:min(11vh, 90px); margin:0 auto 4px; object-fit:contain; }
-  .opt.pic { padding:8px; }
-  #bubble .say { font-size:clamp(22px, 6.5vw, 30px); font-weight:bold; line-height:1.25; margin-top:2px; }
 </style>
-<script>
-/* 小羊跟著鏡頭：轉動平板時，小羊會慢慢飄回畫面中央 */
-AFRAME.registerComponent("follow-camera", {
-  schema: { speed: { default: 2.5 } },
-  tick: function (t, dt) {
-    const cam = document.getElementById("cam3d");
-    if (!cam || !dt) return;
-    const target = cam.object3D.rotation, me = this.el.object3D.rotation;
-    const k = Math.min(1, this.data.speed * dt / 1000);
-    let dy = target.y - me.y;
-    dy = Math.atan2(Math.sin(dy), Math.cos(dy));   // 走最短的方向轉
-    me.y += dy * k;
-    me.x += (target.x - me.x) * k;
-  }
-});
-</script>
 </head>
 <body>
 
@@ -76,25 +77,11 @@ AFRAME.registerComponent("follow-camera", {
   <p id="err" style="color:#c62828"></p>
 </div>
 
-<div id="title"></div>
-<button id="speak" aria-label="念題目">🔊</button>
-<div id="bubble"><div class="who">🐑 Lamby 小羊老師</div><div class="say" id="bubbleText"></div><img id="bubbleImg" alt=""></div>
-
-<!-- 3D 場景：小羊（用基本幾何組成，可換成 .glb 模型） -->
-<a-scene embedded vr-mode-ui="enabled:false" xr-mode-ui="enabled:false" renderer="alpha:true; antialias:true"
-         device-orientation-permission-ui="enabled:true" loading-screen="enabled:false">
-  <a-assets><img id="lambyImg" src="lamby.png" crossorigin="anonymous"></a-assets>
-  <a-entity id="cam3d" camera look-controls="magicWindowTrackingEnabled:true; touchEnabled:false" position="0 1.6 0"></a-entity>
-  <a-entity light="type:ambient; intensity:0.8"></a-entity>
-  <a-entity light="type:directional; intensity:0.8" position="1 3 2"></a-entity>
-
-  <a-entity id="pivot" position="0 1.6 0" follow-camera>
-    <a-entity id="sheepGroup" position="0 -0.1 -3"></a-entity>
-  </a-entity>
-</a-scene>
-
-<div id="ui">
-  <div id="opts"></div>
+<div id="game">
+  <div id="top"><div id="title"></div><button id="speak" aria-label="念題目">🔊</button></div>
+  <div id="bubble"><div class="who">🐑 Lamby 小羊老師</div><div class="say" id="bubbleText"></div><img id="bubbleImg" alt=""></div>
+  <div id="stage"><div id="sheep"></div></div>
+  <div id="ui"><div id="opts"></div></div>
 </div>
 
 <div id="clue">
@@ -124,27 +111,19 @@ async function loadQuestions() {
   return r.json();
 }
 
-/* ---------- 建立小羊 ---------- */
-function makeSheep(x, color, isHost, flip) {
-  // 外層負責左右位置和上下跳；內層是小羊圖片（說話、跳、搖頭的動畫都做在內層）
-  const s = document.createElement("a-entity");
-  s.setAttribute("position", `${x} 0 0`);
-  s.setAttribute("animation", "property: position; to: " + x + " 0.15 0; dir: alternate; loop: true; dur: 700; easing: easeInOutSine");
-  const img = document.createElement("a-image");
-  img.setAttribute("src", "#lambyImg");
-  img.setAttribute("width", 1.6); img.setAttribute("height", 1.6 * 567 / 640);
-  img.setAttribute("material", "transparent: true; alphaTest: 0.05; shader: flat");
-  if (flip) img.setAttribute("scale", "-1 1 1");
-  if (isHost) img.id = "host";
-  s.appendChild(img);
-  return s;
-}
+/* ---------- 建立小羊（中間那隻是小羊老師 Lamby） ---------- */
 function setup() {
-const group = document.getElementById("sheepGroup");
-const gap = 1.6, n = P.sheep;
-const hostIndex = Math.floor((n - 1) / 2);   // 中間那隻是小羊老師
-for (let i = 0; i < n; i++) group.appendChild(makeSheep((i - (n - 1) / 2) * gap, P.color, i === hostIndex, i > hostIndex));
-group.setAttribute("scale", n > 2 ? "0.42 0.42 0.42" : (n == 2 ? "0.75 0.75 0.75" : "1 1 1"));
+const box = document.getElementById("sheep"), n = Math.max(1, Math.min(3, P.sheep || 1));
+const hostIndex = Math.floor((n - 1) / 2);
+for (let i = 0; i < n; i++) {
+  const w = document.createElement("div");
+  w.className = "sheepbox" + (i > hostIndex ? " flip" : "");
+  w.style.maxWidth = `calc(${100 / n}% - 4px)`;
+  w.style.animationDelay = (i * 0.2) + "s";
+  const img = document.createElement("img"); img.src = "lamby.png"; img.alt = "sheep";
+  if (i === hostIndex) img.id = "host";
+  w.appendChild(img); box.appendChild(w);
+}
 
 /* ---------- 題目與選項 ---------- */
 document.getElementById("title").textContent = "🐑 Puzzle " + id;
@@ -190,15 +169,11 @@ function showBubble(text) {
   document.getElementById("bubbleImg").classList.toggle("has", !!(P && P.image && text === P.q));   // 題目圖片只在出題時顯示
   bubble.classList.remove("show"); void bubble.offsetWidth; bubble.classList.add("show");
 }
-let mouthTimer = null, acting = false;
+let acting = false;
 function mouthMove(on) {
   // 說話時小羊會一伸一縮，看起來像在講話
-  const h = document.getElementById("host"); if (!h) return;
-  clearInterval(mouthTimer);
-  const sx = h.getAttribute("scale").x < 0 ? -1 : 1;
-  if (!on || acting) { if (!acting) h.setAttribute("scale", `${sx} 1 1`); return; }
-  let up = false;
-  mouthTimer = setInterval(() => { up = !up; h.setAttribute("scale", up ? `${sx * 0.96} 1.07 1` : `${sx} 1 1`); }, 160);
+  const h = document.getElementById("host"); if (!h || acting) return;
+  h.classList.toggle("talk", on);
 }
 function talk(bubbleWords, voiceWords, onDone) {
   showBubble(bubbleWords);
@@ -215,10 +190,8 @@ function talk(bubbleWords, voiceWords, onDone) {
 }
 function hostDo(move) {
   const h = document.getElementById("host"); if (!h) return;
-  clearInterval(mouthTimer); acting = true;
-  if (move === "jump")  h.setAttribute("animation__act", "property: scale; from: 1 1 1; to: 1.25 1.25 1.25; dir: alternate; loop: 4; dur: 200; easing: easeOutQuad");
-  if (move === "shake") h.setAttribute("animation__act", "property: rotation; from: 0 0 -12; to: 0 0 12; dir: alternate; loop: 4; dur: 120; easing: linear");
-  setTimeout(() => { h.removeAttribute("animation__act"); h.setAttribute("rotation", "0 0 0"); h.setAttribute("scale", "1 1 1"); acting = false; }, 1000);
+  acting = true; h.classList.remove("talk", "jump", "shake"); void h.offsetWidth; h.classList.add(move);
+  setTimeout(() => { h.classList.remove(move); acting = false; }, 1000);
 }
 function askQuestion() { talk(P.q, P.say || P.q); }
 document.getElementById("speak").onclick = askQuestion;
@@ -236,10 +209,6 @@ loadQuestions().then(list => {
 /* ---------- 開啟後鏡頭（需要 HTTPS） ---------- */
 document.getElementById("startBtn").onclick = async () => {
   try {
-    // iOS 需要使用者點擊後才能要求陀螺儀權限
-    if (typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission) {
-      try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
-    }
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
     document.getElementById("cam").srcObject = stream;
     document.getElementById("start").style.display = "none";
