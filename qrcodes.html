@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>列印 QR Code</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  body { font-family: "Microsoft JhengHei", sans-serif; padding:20px; }
+  .bar { margin-bottom:20px; }
+  .bar input { width:420px; font-size:16px; padding:6px; }
+  .grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:30px; }
+  .card { border:3px dashed #ff7043; border-radius:16px; padding:20px; text-align:center; page-break-inside:avoid; }
+  .card h2 { margin:0 0 10px; color:#e65100; }
+  .card .qr { display:inline-block; }
+  @media print { .bar { display:none; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  遊戲網址：<input id="base" placeholder="https://你的帳號.github.io/AR/index.html">
+  題數：<input id="count" type="number" value="5" style="width:60px">
+  <button onclick="build()">產生</button>
+  <button onclick="print()">列印</button>
+</div>
+<div class="grid" id="grid"></div>
+<script>
+function build() {
+  const base = document.getElementById("base").value.trim();
+  const n = +document.getElementById("count").value;
+  if (!base) { alert("請先輸入遊戲網址"); return; }
+  const grid = document.getElementById("grid"); grid.innerHTML = "";
+  for (let i = 1; i <= n; i++) {
+    const c = document.createElement("div"); c.className = "card";
+    c.innerHTML = `<h2>🐑 Puzzle ${i}</h2><div class="qr"></div><p>用平板掃我！</p>`;
+    grid.appendChild(c);
+    new QRCode(c.querySelector(".qr"), { text: `${base}?id=${i}`, width: 220, height: 220 });
+  }
+}
+</script>
+</body>
+</html>
