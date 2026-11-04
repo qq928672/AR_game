@@ -12,6 +12,9 @@
   #game { position:fixed; inset:0; z-index:1; display:flex; flex-direction:column; height:100vh; height:100dvh; }
   #top { flex:none; display:flex; align-items:center; justify-content:space-between; padding:12px 16px 4px; }
   #title { color:#fff; font-size:18px; text-shadow:0 2px 4px #000; }
+  #motion { display:none; font-size:15px; border:0; border-radius:20px; padding:8px 12px; margin-right:8px; background:#fff; color:#e65100;
+            font-weight:bold; box-shadow:0 3px 6px rgba(0,0,0,.4); font-family:inherit; }
+  #motion.show { display:inline-block; }
   #speak { font-size:28px; border:0; border-radius:50%; width:56px; height:56px; background:#ffd54f; box-shadow:0 3px 6px rgba(0,0,0,.4); }
 
   /* 小羊老師的對話框 */
@@ -92,7 +95,7 @@
 </div>
 
 <div id="game">
-  <div id="top"><div id="title"></div><button id="speak" aria-label="念題目">🔊</button></div>
+  <div id="top"><div id="title"></div><div><button id="motion">🧭 開啟動作感應</button><button id="speak" aria-label="念題目">🔊</button></div></div>
   <div id="bubble"><div class="who">🐑 Lamby 小羊老師</div><div class="say" id="bubbleText"></div><img id="bubbleImg" alt=""></div>
   <div id="stage"><div id="sheep"></div></div>
   <div id="ui"><div id="opts"></div></div>
@@ -257,13 +260,27 @@ const World = {
   }
 };
 
+/* ---------- 動作感應權限：沒收到資料時顯示按鈕讓學生再按一次 ---------- */
+async function askMotion() {
+  if (typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission) {
+    try { return await DeviceOrientationEvent.requestPermission(); } catch (e) { return "error"; }
+  }
+  return "not-needed";
+}
+const motionBtn = document.getElementById("motion");
+motionBtn.onclick = async () => {
+  const r = await askMotion();
+  if (r === "denied") alert("動作感應被拒絕了。\n請把 Safari 全部分頁關掉再重新掃描，或到「設定 → Safari → 清除瀏覽紀錄和網站資料」後再試。");
+  setTimeout(checkMotion, 1500);
+};
+function checkMotion() { motionBtn.classList.toggle("show", !World.sensor); }
+
 /* ---------- 開啟後鏡頭（需要 HTTPS） ---------- */
 document.getElementById("startBtn").onclick = async () => {
   // iPad / iPhone 要先允許「動作與方向」才能讀到平板轉動
-  if (typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission) {
-    try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
-  }
+  await askMotion();
   World.start();
+  setTimeout(checkMotion, 2000);
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
     document.getElementById("cam").srcObject = stream;
