@@ -27,14 +27,28 @@
   #bubble img { display:none; width:100%; height:min(20vh, 160px); object-fit:contain; border-radius:12px; margin:8px auto 0; }
   #bubble img.has { display:block; }
 
-  /* 小羊區：自動填滿剩下的空間，小羊永遠置中 */
-  #stage { flex:1 1 0; min-height:0; position:relative; }
-  #sheep { position:absolute; inset:9% 12px 3%; display:flex; align-items:center; justify-content:center; gap:4px; }
-  .sheepbox { flex:0 1 auto; height:100%; max-height:280px; display:flex; align-items:center; justify-content:center;
-              animation:bob .7s ease-in-out infinite alternate; }
-  .sheepbox img { max-height:100%; max-width:100%; object-fit:contain; display:block; }
+  /* 小羊區：自動填滿剩下的空間；小羊會跟著平板轉動在空間中小幅移動 */
+  #stage { flex:1 1 0; min-height:0; position:relative; perspective:900px; }
+  #sheep { position:absolute; inset:9% 12px 3%; display:flex; align-items:center; justify-content:center; gap:4px;
+           will-change:transform; }
+  .sheepbox { flex:0 1 auto; height:100%; max-height:280px; position:relative;
+              display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+  .hop { height:90%; display:flex; align-items:flex-end; justify-content:center; transform-origin:50% 100%;
+         animation:hop 1.15s ease-in-out infinite; position:relative; z-index:1; }
+  .hop img { max-height:100%; max-width:100%; object-fit:contain; display:block; }
   .sheepbox.flip img { transform:scaleX(-1); }
-  @keyframes bob { to { transform:translateY(-6%); } }
+  /* 腳下的影子：跳起來時變小變淡，讓小羊像站在地上 */
+  .shadow { position:absolute; bottom:2%; left:50%; width:62%; height:9%; margin-left:-31%; border-radius:50%;
+            background:radial-gradient(closest-side, rgba(0,0,0,.45), rgba(0,0,0,0)); animation:shadow 1.15s ease-in-out infinite; }
+  /* 跳動：起跳 → 空中 → 落地壓扁一下 */
+  @keyframes hop {
+    0%   { transform:translateY(0) scale(1.07, .93); }
+    14%  { transform:translateY(0) scale(1, 1); }
+    45%  { transform:translateY(-13%) scale(.97, 1.04); }
+    72%  { transform:translateY(0) scale(1, 1); }
+    82%  { transform:translateY(0) scale(1.05, .95); }
+    100% { transform:translateY(0) scale(1, 1); } }
+  @keyframes shadow { 0%,14%,72%,100% { transform:scale(1); opacity:1; } 45% { transform:scale(.62); opacity:.45; } }
   #host.talk  { animation:talk .32s ease-in-out infinite alternate; transform-origin:50% 100%; }
   #host.jump  { animation:jump .4s ease-out 2; transform-origin:50% 100%; }
   #host.shake { animation:shakehead .24s linear 4; transform-origin:50% 100%; }
@@ -119,10 +133,12 @@ for (let i = 0; i < n; i++) {
   const w = document.createElement("div");
   w.className = "sheepbox" + (i > hostIndex ? " flip" : "");
   w.style.maxWidth = `calc(${100 / n}% - 4px)`;
-  w.style.animationDelay = (i * 0.2) + "s";
+  const hop = document.createElement("div"); hop.className = "hop";
+  const sh = document.createElement("div"); sh.className = "shadow";
+  hop.style.animationDelay = sh.style.animationDelay = (i * 0.25) + "s";   // 每隻跳的節奏錯開
   const img = document.createElement("img"); img.src = "lamby.png"; img.alt = "sheep";
   if (i === hostIndex) img.id = "host";
-  w.appendChild(img); box.appendChild(w);
+  hop.appendChild(img); w.appendChild(sh); w.appendChild(hop); box.appendChild(w);
 }
 
 /* ---------- 題目與選項 ---------- */
@@ -206,8 +222,48 @@ loadQuestions().then(list => {
   startBtn.disabled = false; startBtn.textContent = "開始 Start";
 }).catch(() => { startBtn.style.display = "none"; errEl.textContent = "題目載入失敗，請檢查網路後重新整理。"; });
 
+/* ---------- 小羊放在空間裡：平板轉動時，小羊往反方向移動（有上限，並會慢慢回到中間） ---------- */
+const World = {
+  sensor: null, base: null, x: 0, y: 0, t0: performance.now(),
+  start() {
+    window.addEventListener("deviceorientation", e => {
+      if (e.alpha == null && e.beta == null) return;
+      const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+      const land = Math.abs(ang) === 90 || ang === 270;
+      this.sensor = { yaw: e.alpha || 0, pitch: land ? (ang === 90 ? -(e.gamma || 0) : (e.gamma || 0)) : (e.beta || 0) };
+    });
+    requestAnimationFrame(() => this.tick());
+  },
+  tick() {
+    const el = document.getElementById("sheep"), stage = document.getElementById("stage");
+    const W = stage.clientWidth, H = stage.clientHeight;
+    const maxX = W * 0.15, maxY = H * 0.07, k = W / 45;          // 約 45 度視角
+    let tx = 0, ty = 0;
+    if (this.sensor) {
+      if (!this.base) this.base = { ...this.sensor };
+      let dyaw = this.sensor.yaw - this.base.yaw; dyaw = ((dyaw + 540) % 360) - 180;
+      const dpitch = this.sensor.pitch - this.base.pitch;
+      this.base.yaw += dyaw * 0.012; this.base.pitch += dpitch * 0.012;   // 停下來後慢慢回到中間
+      tx = maxX * Math.tanh(dyaw * k / maxX);                          // 不會偏離太遠
+      ty = maxY * Math.tanh(dpitch * k / maxY);
+    } else {
+      const t = (performance.now() - this.t0) / 1000;                 // 沒有感測器時：輕輕晃動
+      tx = Math.sin(t * 0.7) * W * 0.03; ty = Math.sin(t * 1.1) * H * 0.015;
+    }
+    this.x += (tx - this.x) * 0.12; this.y += (ty - this.y) * 0.12;
+    const turn = maxX ? (-this.x / maxX) * 14 : 0;                    // 移動時微微轉向，有立體感
+    el.style.transform = `translate3d(${this.x.toFixed(1)}px, ${this.y.toFixed(1)}px, 0) rotateY(${turn.toFixed(1)}deg)`;
+    requestAnimationFrame(() => this.tick());
+  }
+};
+
 /* ---------- 開啟後鏡頭（需要 HTTPS） ---------- */
 document.getElementById("startBtn").onclick = async () => {
+  // iPad / iPhone 要先允許「動作與方向」才能讀到平板轉動
+  if (typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission) {
+    try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+  }
+  World.start();
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
     document.getElementById("cam").srcObject = stream;
