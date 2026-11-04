@@ -124,14 +124,12 @@
     <label>題號 <small>QR Code 會對應這個號碼；改題號後要重印 QR Code</small></label>
     <input type="text" id="f_id" inputmode="numeric" style="width:120px">
 
-    <label>題目 <small>畫面上 Lamby 對話框顯示的文字，可加 emoji</small></label>
+    <label>題目 <small>顯示在 Lamby 的對話框，Lamby 也會念出來；可加 emoji（emoji 不會被念出來）</small></label>
     <input type="text" id="f_q" placeholder="例如：How many sheep?">
 
     <label>題目圖片 <small>選填，會出現在 Lamby 的對話框裡；系統會自動壓縮並固定顯示大小</small></label>
     <div class="qimg" id="f_qimg"></div>
 
-    <label>Lamby 念出來的英文 <small>可留白，留白就念題目</small></label>
-    <input type="text" id="f_say" placeholder="例如：How many sheep can you see?">
 
     <label>畫面上出現幾隻羊 <small>數數題會用到</small></label>
     <select id="f_sheep"><option value="1">1 隻</option><option value="2">2 隻</option><option value="3">3 隻</option></select>
@@ -337,7 +335,7 @@ function openEditor(id) {
                        : questions.find(x => x.id === id);
   $("edTitle").textContent = id == null ? "新增題目" : `編輯第 ${id} 題`;
   $("f_id").value = id == null ? questions.reduce((m, x) => Math.max(m, x.id), 0) + 1 : id;
-  $("f_q").value = q.q; $("f_say").value = q.say === q.q ? "" : (q.say || "");
+  $("f_q").value = q.q;
   $("f_sheep").value = String(q.sheep || 1);
   const box = $("f_opts"); box.innerHTML = "";
   const ai = ansIdx(q), imgs = q.optionImages || [];
@@ -365,7 +363,7 @@ function saveEditor() {
   const newId = parseInt($("f_id").value, 10);
   if (!(newId >= 1) || String(newId) !== $("f_id").value.trim()) return alert("題號要是 1 以上的整數。");
   if (questions.some(x => x.id === newId && x.id !== editingId)) return alert(`第 ${newId} 題已經存在，請換一個題號，或先用 ↑↓ 交換。`);
-  const data = { q: qText, say: $("f_say").value.trim() || qText, sheep: +$("f_sheep").value,
+  const data = { q: qText, sheep: +$("f_sheep").value,
                  image: $("f_qimg").querySelector(".imgpick").dataset.src || "",
                  options: opts, optionImages: imgs.some(Boolean) ? imgs : [], answerIndex,
                  answer: opts[answerIndex] || ("圖片 " + (answerIndex + 1)), clue: { code: $("f_code").value.trim(), text: $("f_text").value.trim() } };
@@ -374,7 +372,7 @@ function saveEditor() {
     msg("info", `已新增第 ${newId} 題（還沒發布）。發布後記得印第 ${newId} 號 QR Code。`);
     showReprint([newId]);
   } else {
-    Object.assign(questions.find(x => x.id === editingId), data);
+    const t = questions.find(x => x.id === editingId); delete t.say; Object.assign(t, data);
     closeEditor();
     if (newId !== editingId) return applyIdMap({ [editingId]: newId }, `已修改第 ${editingId} 題（還沒發布）。`);
     msg("info", `已修改第 ${editingId} 題（還沒發布）。`);

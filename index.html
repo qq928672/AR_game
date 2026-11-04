@@ -212,7 +212,9 @@ function hostDo(move) {
   acting = true; h.classList.remove("talk", "jump", "shake"); void h.offsetWidth; h.classList.add(move);
   setTimeout(() => { h.classList.remove(move); acting = false; }, 1000);
 }
-function askQuestion() { talk(P.q, P.say || P.q); }
+// Lamby 直接念題目：emoji 不念，「___」念成 blank
+const speakable = t => t.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "").replace(/_{2,}/g, " blank ").replace(/\s+/g, " ").trim();
+function askQuestion() { talk(P.q, speakable(P.q)); }
 document.getElementById("speak").onclick = askQuestion;
 
 /* ---------- 讀取題目 ---------- */
