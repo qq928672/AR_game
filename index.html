@@ -31,6 +31,16 @@
   #clue .card { background:#fff; border:4px dashed #ff7043; border-radius:24px; padding:24px; max-width:420px; }
   #clue .code { font-size:64px; font-weight:bold; color:#e65100; letter-spacing:6px; }
   #clue p { font-size:22px; color:#333; }
+  /* 小羊老師的對話框 */
+  #bubble { position:fixed; top:84px; left:50%; transform:translateX(-50%) scale(0); z-index:3;
+            width:min(88vw, 460px); box-sizing:border-box; background:#fff; color:#333; border-radius:24px;
+            padding:14px 18px; box-shadow:0 6px 16px rgba(0,0,0,.35); text-align:center;
+            transition:transform .25s cubic-bezier(.3,1.6,.6,1); }
+  #bubble.show { transform:translateX(-50%) scale(1); }
+  #bubble::after { content:""; position:absolute; left:50%; bottom:-18px; margin-left:-14px;
+            border:14px solid transparent; border-top:18px solid #fff; border-bottom:0; }
+  #bubble .who { font-size:16px; color:#e65100; font-weight:bold; }
+  #bubble .say { font-size:clamp(22px, 6.5vw, 30px); font-weight:bold; line-height:1.25; margin-top:2px; }
 </style>
 <script>
 /* 小羊跟著鏡頭：轉動平板時，小羊會慢慢飄回畫面中央 */
@@ -55,14 +65,15 @@ AFRAME.registerComponent("follow-camera", {
 
 <div id="start">
   <div style="font-size:90px">🐑</div>
-  <h1>Year of the Sheep</h1>
-  <p style="font-size:20px">羊年英文大挑戰</p>
+  <h1>Hi! I'm Lamby!</h1>
+  <p style="font-size:20px">我是小羊老師，來挑戰我的英文題目吧！</p>
   <button id="startBtn">開始 Start</button>
   <p id="err" style="color:#c62828"></p>
 </div>
 
 <div id="title"></div>
 <button id="speak" aria-label="念題目">🔊</button>
+<div id="bubble"><div class="who">🐑 Lamby 小羊老師</div><div class="say" id="bubbleText"></div></div>
 
 <!-- 3D 場景：小羊（用基本幾何組成，可換成 .glb 模型） -->
 <a-scene embedded vr-mode-ui="enabled:false" xr-mode-ui="enabled:false" renderer="alpha:true; antialias:true"
@@ -77,7 +88,6 @@ AFRAME.registerComponent("follow-camera", {
 </a-scene>
 
 <div id="ui">
-  <div id="q"></div>
   <div id="opts"></div>
 </div>
 
@@ -121,7 +131,7 @@ const id = new URLSearchParams(location.search).get("id") || "1";
 const P = PUZZLES[id] || PUZZLES[1];
 
 /* ---------- 建立小羊 ---------- */
-function makeSheep(x, color) {
+function makeSheep(x, color, isHost) {
   const s = document.createElement("a-entity");
   s.setAttribute("position", `${x} 0 0`);
   s.setAttribute("animation", "property: position; to: " + x + " 0.25 0; dir: alternate; loop: true; dur: 700; easing: easeInOutSine");
@@ -146,28 +156,49 @@ function makeSheep(x, color) {
     leg.setAttribute("color", "#4e342e");
     s.appendChild(leg);
   });
+  if (isHost) {
+    s.id = "host";
+    // 嘴巴（說話時會一開一合）
+    const mouth = document.createElement("a-sphere");
+    mouth.id = "mouth"; mouth.setAttribute("position", "0 .1 .74"); mouth.setAttribute("radius", .07);
+    mouth.setAttribute("scale", "1 .25 .5"); mouth.setAttribute("color", "#c62828");
+    s.appendChild(mouth);
+    // 新年紅色蝴蝶結
+    [[-.13, 20], [.13, -20]].forEach(([bx, rz]) => {
+      const w = document.createElement("a-cone");
+      w.setAttribute("position", `${bx} .5 .5`); w.setAttribute("rotation", `0 0 ${bx < 0 ? 90 : -90}`);
+      w.setAttribute("radius-bottom", .09); w.setAttribute("radius-top", 0); w.setAttribute("height", .2);
+      w.setAttribute("color", "#e53935"); s.appendChild(w);
+    });
+    const knot = document.createElement("a-sphere");
+    knot.setAttribute("position", "0 .5 .5"); knot.setAttribute("radius", .05); knot.setAttribute("color", "#ffca28");
+    s.appendChild(knot);
+  }
   return s;
 }
 const group = document.getElementById("sheepGroup");
 const gap = 1.4, n = P.sheep;
-for (let i = 0; i < n; i++) group.appendChild(makeSheep((i - (n - 1) / 2) * gap, P.color));
+const hostIndex = Math.floor((n - 1) / 2);   // 中間那隻是小羊老師
+for (let i = 0; i < n; i++) group.appendChild(makeSheep((i - (n - 1) / 2) * gap, P.color, i === hostIndex));
 group.setAttribute("scale", n > 2 ? "0.5 0.5 0.5" : (n == 2 ? "0.75 0.75 0.75" : "1 1 1"));
 group.setAttribute("animation__turn", "property: rotation; from: 0 -20 0; to: 0 20 0; dir: alternate; loop: true; dur: 3000; easing: easeInOutSine");
 
 /* ---------- 題目與選項 ---------- */
 document.getElementById("title").textContent = "🐑 Puzzle " + id;
-document.getElementById("q").textContent = P.q;
 const optsEl = document.getElementById("opts");
 P.options.forEach(o => {
   const b = document.createElement("button");
   b.className = "opt"; b.textContent = o;
   b.onclick = () => {
     if (o === P.answer) {
-      b.classList.add("right"); speak("Great job!");
-      setTimeout(showClue, 800);
+      b.classList.add("right");
+      hostDo("jump");
+      talk("Yay! Great job! 🎉", "Yay! Great job!");
+      setTimeout(showClue, 2200);
     } else {
       b.classList.remove("wrong"); void b.offsetWidth; b.classList.add("wrong");
-      speak("Try again!");
+      hostDo("shake");
+      talk("Oops! Try again! 💪", "Oops! Try again!", () => setTimeout(() => showBubble(P.q), 600));
     }
   };
   optsEl.appendChild(b);
@@ -183,15 +214,41 @@ function showClue() {
   } catch (e) {}
 }
 
-/* ---------- 英文發音（瀏覽器內建語音） ---------- */
-function speak(text) {
+/* ---------- 小羊老師說話：對話框 + 嘴巴動 + 英文語音 ---------- */
+const bubble = document.getElementById("bubble"), bubbleText = document.getElementById("bubbleText");
+function showBubble(text) {
+  bubbleText.textContent = text;
+  bubble.classList.remove("show"); void bubble.offsetWidth; bubble.classList.add("show");
+}
+let mouthTimer = null;
+function mouthMove(on) {
+  const m = document.getElementById("mouth"); if (!m) return;
+  clearInterval(mouthTimer);
+  if (!on) { m.setAttribute("scale", "1 .25 .5"); return; }
+  let open = false;
+  mouthTimer = setInterval(() => { open = !open; m.setAttribute("scale", open ? "1 .9 .5" : "1 .25 .5"); }, 140);
+}
+function talk(bubbleWords, voiceWords, onDone) {
+  showBubble(bubbleWords);
+  mouthMove(true);
+  let finished = false;
+  const done = () => { if (finished) return; finished = true; mouthMove(false); onDone && onDone(); };
+  setTimeout(done, 900 + voiceWords.length * 90);      // 沒有語音的裝置也會結束
   if (!("speechSynthesis" in window)) return;
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-US"; u.rate = 0.8;
+  const u = new SpeechSynthesisUtterance(voiceWords);
+  u.lang = "en-US"; u.rate = 0.8; u.pitch = 1.4;       // 音調高一點，像小羊
+  u.onend = done;
   speechSynthesis.speak(u);
 }
-document.getElementById("speak").onclick = () => speak(P.say);
+function hostDo(move) {
+  const h = document.getElementById("host"); if (!h) return;
+  if (move === "jump")  h.setAttribute("animation__act", "property: scale; from: 1 1 1; to: 1.25 1.25 1.25; dir: alternate; loop: 4; dur: 200; easing: easeOutQuad");
+  if (move === "shake") h.setAttribute("animation__act", "property: rotation; from: 0 -25 0; to: 0 25 0; dir: alternate; loop: 4; dur: 120; easing: linear");
+  setTimeout(() => { h.removeAttribute("animation__act"); h.setAttribute("rotation", "0 0 0"); h.setAttribute("scale", "1 1 1"); }, 1000);
+}
+function askQuestion() { talk(P.q, P.say); }
+document.getElementById("speak").onclick = askQuestion;
 
 /* ---------- 開啟後鏡頭（需要 HTTPS） ---------- */
 document.getElementById("startBtn").onclick = async () => {
@@ -203,7 +260,8 @@ document.getElementById("startBtn").onclick = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
     document.getElementById("cam").srcObject = stream;
     document.getElementById("start").style.display = "none";
-    setTimeout(() => speak(P.say), 500);
+    // 小羊老師先打招呼，再出題
+    setTimeout(() => talk("Hi! I'm Lamby! 👋", "Hi! I'm Lamby! Let's play!", () => setTimeout(askQuestion, 400)), 500);
   } catch (e) {
     document.getElementById("err").textContent = "無法開啟相機：請確認網址是 https，並允許相機權限。";
   }
