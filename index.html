@@ -217,7 +217,7 @@ const startBtn = document.getElementById("startBtn"), errEl = document.getElemen
 startBtn.disabled = true; startBtn.textContent = "載入中…";
 loadQuestions().then(list => {
   P = list.find(x => String(x.id) === String(id));
-  if (!P) { startBtn.style.display = "none"; errEl.textContent = "找不到第 " + id + " 題，請告訴老師。"; return; }
+  if (!P) { startBtn.style.display = "none"; errEl.textContent = "🐑 這一題（第 " + id + " 題）已經被老師移除囉！請找其他的 QR Code。"; return; }
   setup();
   startBtn.disabled = false; startBtn.textContent = "開始 Start";
 }).catch(() => { startBtn.style.display = "none"; errEl.textContent = "題目載入失敗，請檢查網路後重新整理。"; });

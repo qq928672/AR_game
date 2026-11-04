@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Lamby 老師後台</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root { --o:#ff7043; --od:#e65100; --bg:#fff8e1; --line:#f0e0c0; --g:#2e7d32; --r:#c62828; }
   * { box-sizing:border-box; }
@@ -27,6 +28,9 @@
   .badge { background:var(--r); color:#fff; border-radius:20px; font-size:12px; padding:2px 8px; margin-left:6px; display:none; }
   .badge.show { display:inline; }
   .q { display:flex; gap:12px; align-items:flex-start; }
+  .q .qr { flex:none; text-align:center; font-size:12px; color:#999; }
+  .q .qr div { width:96px; height:96px; }
+  .q .qr img, .q .qr canvas { width:96px !important; height:96px !important; }
   .q .num { flex:none; width:54px; height:54px; border-radius:50%; background:var(--o); color:#fff; font-weight:bold; font-size:20px; display:flex; align-items:center; justify-content:center; }
   .q .body { flex:1; min-width:0; }
   .q .title { font-size:20px; font-weight:bold; word-break:break-word; }
@@ -52,7 +56,7 @@
   details ol { line-height:1.9; padding-left:22px; }
   code { background:#f5f5f5; padding:1px 6px; border-radius:4px; }
   .empty { text-align:center; color:#999; padding:30px; }
-  @media (max-width:560px) { .row2 { grid-template-columns:1fr; } .q .num { width:42px; height:42px; font-size:16px; } }
+  @media (max-width:560px) { .q .qr { display:none; } .row2 { grid-template-columns:1fr; } .q .num { width:42px; height:42px; font-size:16px; } }
 </style>
 </head>
 <body>
@@ -61,6 +65,7 @@
   <img src="lamby.png" alt="">
   <h1>Lamby 老師後台<span class="badge" id="dirty">尚未發布</span></h1>
   <button class="primary" onclick="openEditor(null)">＋ 新增題目</button>
+  <button onclick="openQR()">🖨 列印 QR Code</button>
   <button class="green" id="publishBtn" onclick="publish()">發布到網站</button>
 </header>
 
@@ -96,7 +101,7 @@
 
   <div class="panel" style="font-size:14px;color:#666">
     💡 小提醒：題號固定不變，刪除題目不會影響其他題的 QR Code。
-    新增題目後，到 <a href="qrcodes.html" target="_blank">QR Code 產生頁</a> 印出新題目的 QR Code。
+    新增題目後，按上方「🖨 列印 QR Code」印出新題目的 QR Code。
     按「發布到網站」後，約 1 分鐘學生端就會更新。
   </div>
 </main>
@@ -203,17 +208,28 @@ function render() {
           <button onclick="preview(${q.id})">👀 預覽</button>
           <button onclick="move(${i},-1)" ${i === 0 ? "disabled" : ""}>↑</button>
           <button onclick="move(${i},1)" ${i === questions.length - 1 ? "disabled" : ""}>↓</button>
+          <button onclick="openQR(${q.id})">🖨 印這題</button>
           <button class="danger" onclick="removeQ(${q.id})">🗑 刪除</button>
         </div>
       </div>
+      <div class="qr"><div id="qr_${q.id}"></div>第 ${esc(q.id)} 題</div>
     </div>`).join("");
+  questions.forEach(q => { if (window.QRCode) new QRCode($("qr_" + q.id), { text: gameUrl(q.id), width: 192, height: 192 }); });
+}
+const gameUrl = id => location.href.replace(/admin\.html.*$/, "index.html") + "?id=" + id;
+function openQR(only) {
+  store("lambyDraft", JSON.stringify(questions));
+  window.open("qrcodes.html?draft=1" + (only ? "&only=" + only : ""), "_blank");
 }
 function move(i, d) { const [x] = questions.splice(i, 1); questions.splice(i + d, 0, x); setDirty(true); render(); }
 function removeQ(id) {
   const q = questions.find(x => x.id === id);
   if (!confirm(`確定要刪除第 ${id} 題「${q.q}」嗎？`)) return;
   questions = questions.filter(x => x.id !== id); setDirty(true); render();
-  msg("info", `已刪除第 ${id} 題（還沒發布）。已經印好的第 ${id} 號 QR Code 會失效，請記得收回。`);
+  // 檢查有沒有其他題目的線索還叫學生去找這一題
+  const refs = questions.filter(x => new RegExp("(^|[^0-9])" + id + "\\s*號").test(x.clue?.text || "")).map(x => x.id);
+  msg(refs.length ? "err" : "info", `已刪除第 ${id} 題（還沒發布）。已經印好的第 ${id} 號 QR Code 會失效，請記得收回。`
+      + (refs.length ? `⚠️ 第 ${refs.join("、")} 題的線索還寫著「${id} 號」，請記得編輯修改。` : ""));
 }
 function preview(id) { store("lambyDraft", JSON.stringify(questions)); window.open(`index.html?id=${id}&preview=1`, "_blank"); }
 
