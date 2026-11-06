@@ -105,11 +105,12 @@
   <div class="card">
     <div style="font-size:60px">🎉</div>
     <h2 style="color:#2e7d32;margin:4px 0">Great job!</h2>
-    <p>你拿到一組線索：</p>
+    <p id="clueLead">你拿到一組線索：</p>
     <div class="code" id="clueCode"></div>
     <p id="clueText"></p>
   </div>
   <button onclick="location.reload()">再玩一次</button>
+  <button id="backMake" style="display:none;font-size:20px;padding:10px 28px;background:#fff;color:#e65100;border:3px solid #ff7043" onclick="location.href='make.html'">✏️ 回去出題</button>
 </div>
 
 <script src="config.js"></script>
@@ -120,7 +121,35 @@ const params = new URLSearchParams(location.search);
 const id = params.get("id") || "1";
 let P = null;
 
+/* 同學自己出的題目：整題編在網址的 d= 參數裡（make.html 產生），不會上傳也不會存起來 */
+function decodeCustom(s) {
+  try {
+    const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+    return buildCustom(JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))));
+  } catch (e) { return null; }
+}
+// 有照片的題目放在這個分頁的暫存記憶體（sessionStorage），關掉分頁就消失
+function loadMine() {
+  try { return buildCustom(JSON.parse(sessionStorage.getItem("lambyMine"))); } catch (e) { return null; }
+}
+function buildCustom(j) {
+  try {
+    const opts = (Array.isArray(j.o) ? j.o : []).slice(0, 4).map(x => String(x).trim().slice(0, 60));
+    const a = Number(j.a), sheep = Number(j.s) || 1;
+    if (!j.q || opts.length < 2 || opts.some(x => !x) || !(a >= 0 && a < opts.length)) return null;
+    return { id, custom: true, q: String(j.q).slice(0, 200), sheep: Math.max(1, Math.min(3, sheep)),
+             image: /^data:image\/(jpeg|png);base64,[A-Za-z0-9+\/=]+$/.test(j.i || "") ? j.i : "",
+             options: opts, optionImages: [], answerIndex: a,
+             clue: { code: "🎉", text: String(j.m || "").slice(0, 100) || "你答對了同學出的題目！" } };
+  } catch (e) { return null; }
+}
+
 async function loadQuestions() {
+  if (params.get("d") || params.get("mine")) {
+    const c = params.get("mine") ? loadMine() : decodeCustom(params.get("d"));
+    if (!c) throw new Error("bad link");
+    return [c];
+  }
   // 預覽模式：老師在後台按「預覽」時，用還沒發布的草稿
   if (params.get("preview")) {
     try { const d = JSON.parse(localStorage.getItem("lambyDraft") || "null"); if (d) return d; } catch (e) {}
@@ -155,7 +184,8 @@ for (let i = 0; i < n; i++) {
 }
 
 /* ---------- 題目與選項 ---------- */
-document.getElementById("title").textContent = "🐑 Puzzle " + id;
+document.getElementById("title").textContent = P.custom ? "🐑 同學出的題目" : "🐑 Puzzle " + id;
+if (P.custom) { document.getElementById("clueLead").textContent = "同學留給你的話："; document.getElementById("backMake").style.display = params.get("mine") ? "" : "none"; }
 if (P.image) document.getElementById("bubbleImg").src = P.image;
 const optsEl = document.getElementById("opts");
 const answerIndex = P.answerIndex ?? P.options.indexOf(P.answer);
@@ -185,6 +215,7 @@ function showClue() {
   document.getElementById("clueCode").textContent = P.clue.code;
   document.getElementById("clueText").textContent = P.clue.text;
   document.getElementById("clue").style.display = "flex";
+  if (P.custom) return;                    // 同學出的題目不記錄進度
   try {
     const got = JSON.parse(localStorage.getItem("sheepClues") || "{}");
     got[id] = P.clue.code; localStorage.setItem("sheepClues", JSON.stringify(got));
@@ -235,7 +266,9 @@ loadQuestions().then(list => {
   if (!P) { startBtn.style.display = "none"; errEl.textContent = "🐑 這一題（第 " + id + " 題）已經被老師移除囉！請找其他的 QR Code。"; return; }
   setup();
   startBtn.disabled = false; startBtn.textContent = "開始 Start";
-}).catch(() => { startBtn.style.display = "none"; errEl.textContent = "題目載入失敗，請檢查網路後重新整理。"; });
+}).catch(() => { startBtn.style.display = "none";
+  errEl.textContent = params.get("mine") ? "找不到你剛剛出的題目（關掉重開就會消失），請回到出題頁重新做一次。"
+    : params.get("d") ? "這個題目的連結壞掉了，請同學重新產生 QR Code。" : "題目載入失敗，請檢查網路後重新整理。"; });
 
 /* ---------- 小羊放在空間裡：平板轉動時，小羊往反方向移動（有上限，並會慢慢回到中間） ---------- */
 const World = {

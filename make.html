@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>我來出題 - Lamby</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root { --o:#ff7043; --od:#e65100; --bg:#fff8e1; --line:#f0e0c0; --g:#2e7d32; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Microsoft JhengHei","PingFang TC",sans-serif; background:var(--bg); color:#333; }
+  main { max-width:560px; margin:0 auto; padding:16px; }
+  h1 { color:var(--od); font-size:26px; margin:8px 0; display:flex; align-items:center; gap:10px; }
+  h1 img { width:56px; }
+  .panel { background:#fff; border:2px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-weight:bold; margin:14px 0 6px; font-size:17px; }
+  label small { font-weight:normal; color:#888; }
+  input[type=text], select { width:100%; font-size:18px; padding:10px; border:2px solid var(--line); border-radius:10px; font-family:inherit; }
+  input:focus, select:focus { outline:none; border-color:var(--o); }
+  .optrow { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .optrow input[type=radio] { width:26px; height:26px; accent-color:var(--g); flex:none; }
+  button { font-family:inherit; font-size:18px; border:0; border-radius:12px; padding:12px 18px; cursor:pointer; background:#eee; color:#333; }
+  button.primary { background:var(--o); color:#fff; font-weight:bold; width:100%; }
+  .err { color:#c62828; margin-top:10px; min-height:1.2em; }
+  #result { display:none; text-align:center; }
+  #result.show { display:block; }
+  #qr { display:inline-block; padding:12px; background:#fff; }
+  .actions { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
+  .note { font-size:14px; color:#777; line-height:1.6; }
+  .photo { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .photo img { display:none; max-width:160px; max-height:120px; border:2px solid var(--line); border-radius:10px; }
+  .photo img.has { display:block; }
+  .photo .x { display:none; }
+  .photo.has .x { display:inline-block; }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="lamby.png" alt="">我來出題！</h1>
+
+  <div class="panel" id="form">
+    <label>題目 <small>用英文寫；Lamby 會念出來</small></label>
+    <input type="text" id="q" maxlength="120" placeholder="例如：What color is a sheep?">
+
+    <label>照片 <small>選填；拍一個東西，讓 Lamby 把照片放在題目裡</small></label>
+    <div class="photo" id="photoBox">
+      <img id="photoImg" alt="">
+      <button type="button" onclick="$('photoIn').click()">📷 拍照</button>
+      <button type="button" class="x" onclick="setPhoto('')">✕ 不要照片</button>
+      <input type="file" id="photoIn" accept="image/*" capture="environment" hidden>
+    </div>
+    <p class="note" id="photoNote" style="display:none;margin:6px 0 0">📌 有照片的題目只能在這台平板上玩，不能用 QR Code 傳給別人。照片不會上傳，關掉頁面就消失。</p>
+
+    <label>選項 <small>2～4 個，點左邊的圓圈選出正確答案</small></label>
+    <div id="opts"></div>
+
+    <label>畫面上要有幾隻羊？</label>
+    <select id="sheep"><option value="1">1 隻</option><option value="2">2 隻</option><option value="3">3 隻</option></select>
+
+    <label>答對時想對同學說的話 <small>選填</small></label>
+    <input type="text" id="msg" maxlength="60" placeholder="例如：你好厲害！">
+
+    <div class="err" id="err"></div>
+    <button class="primary" onclick="make()">✨ 產生我的 QR Code</button>
+  </div>
+
+  <div class="panel" id="result">
+    <h2 style="margin-top:0;color:var(--g)" id="resTitle">做好了！給同學掃掃看</h2>
+    <div id="qr"></div>
+    <div class="actions">
+      <button class="primary" style="width:auto" onclick="tryIt()" id="playBtn">▶ 我先試玩</button>
+      <button onclick="copyLink()" id="copyBtn">📋 複製連結</button>
+      <button onclick="edit()">✏️ 回去修改</button>
+    </div>
+    <p class="note" id="resNote">你的題目不會上傳到任何地方，只存在這個 QR Code 裡。<br>關掉這個頁面就會消失，所以請讓同學掃完再關。</p>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const box = $("opts");
+for (let i = 0; i < 4; i++) {
+  const d = document.createElement("div"); d.className = "optrow";
+  d.innerHTML = `<input type="radio" name="ans" ${i === 0 ? "checked" : ""}><input type="text" maxlength="40" placeholder="選項 ${i + 1}${i < 2 ? "" : "（選填）"}">`;
+  box.appendChild(d);
+}
+
+// 把題目編成網址安全的文字（支援中文和 emoji）
+function encodeQ(obj) {
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let bin = ""; bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/* ---------- 照片：縮小後只放在這個分頁的暫存記憶體，不會上傳 ---------- */
+let photo = "";
+function setPhoto(v) {
+  photo = v;
+  $("photoImg").src = v; $("photoImg").classList.toggle("has", !!v);
+  $("photoBox").classList.toggle("has", !!v); $("photoNote").style.display = v ? "" : "none";
+}
+function resizePhoto(file, max = 480) {
+  return new Promise((ok, fail) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      const out = c.toDataURL("image/jpeg", 0.75);
+      if (out.length * 0.75 > 150 * 1024 && max > 200) return resizePhoto(file, Math.round(max * 0.75)).then(ok, fail);
+      ok(out);
+    };
+    img.onerror = () => fail(new Error("這個檔案不是圖片"));
+    img.src = url;
+  });
+}
+$("photoIn").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { setPhoto(await resizePhoto(f)); $("err").textContent = ""; } catch (x) { $("err").textContent = x.message; }
+  e.target.value = "";
+};
+
+// 從「回去出題」回來時，把剛剛的題目填回去
+(function restore() {
+  try {
+    const j = JSON.parse(sessionStorage.getItem("lambyMine")); if (!j) return;
+    $("q").value = j.q || ""; $("sheep").value = String(j.s || 1); $("msg").value = j.m || "";
+    [...box.children].forEach((r, i) => {
+      r.querySelector("input[type=text]").value = (j.o || [])[i] || "";
+      r.querySelector("input[type=radio]").checked = i === j.a;
+    });
+    if (j.i) setPhoto(j.i);
+  } catch (e) {}
+})();
+
+let link = "";
+function make() {
+  const q = $("q").value.trim(), rows = [...box.children];
+  const opts = [], ans = [];
+  rows.forEach(r => {
+    const t = r.querySelector("input[type=text]").value.trim();
+    if (!t) return;
+    if (r.querySelector("input[type=radio]").checked) ans.push(opts.length);
+    opts.push(t);
+  });
+  const err = t => ($("err").textContent = t, false);
+  if (!q) return err("請先寫下題目喔！");
+  if (opts.length < 2) return err("至少要有 2 個選項喔！");
+  if (new Set(opts.map(x => x.toLowerCase())).size !== opts.length) return err("選項不能一樣喔！");
+  if (!ans.length) return err("請點選項左邊的圓圈，選出正確答案！");
+  $("err").textContent = "";
+
+  const data = { q, o: opts, a: ans[0], s: +$("sheep").value };
+  const m = $("msg").value.trim(); if (m) data.m = m;
+  const base = location.href.replace(/make\.html.*$/, "index.html");
+  const withPhoto = !!photo;
+  $("qr").innerHTML = "";
+  if (withPhoto) {
+    // 有照片：放進這個分頁的暫存記憶體，在這台平板直接玩（照片太大，放不進 QR Code）
+    data.i = photo;
+    try { sessionStorage.setItem("lambyMine", JSON.stringify(data)); }
+    catch (e) { return err("這台裝置的暫存空間不夠，請重新拍一張。"); }
+    link = base + "?mine=1";
+  } else {
+    link = base + "?d=" + encodeQ(data);
+    try { new QRCode($("qr"), { text: link, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.L }); }
+    catch (e) { return err("題目太長了，QR Code 放不下，請寫短一點。"); }
+    try { sessionStorage.setItem("lambyMine", JSON.stringify(data)); } catch (e) {}
+  }
+  $("resTitle").textContent = withPhoto ? "做好了！開始玩吧" : "做好了！給同學掃掃看";
+  $("playBtn").textContent = withPhoto ? "▶ 開始玩" : "▶ 我先試玩";
+  $("copyBtn").style.display = withPhoto ? "none" : "";
+  $("resNote").innerHTML = withPhoto
+    ? "照片和題目只存在這台平板，不會上傳到任何地方。<br>可以把平板交給同學玩。關掉這個頁面就會消失。"
+    : "你的題目不會上傳到任何地方，只存在這個 QR Code 裡。<br>關掉這個頁面就會消失，所以請讓同學掃完再關。";
+  $("form").style.display = "none"; $("result").classList.add("show");
+  window.scrollTo(0, 0);
+}
+function edit() { $("result").classList.remove("show"); $("form").style.display = ""; }
+// 有照片：在同一個分頁開啟（暫存記憶體才帶得過去）；沒照片：另開分頁
+function tryIt() { photo ? (location.href = link) : window.open(link, "_blank"); }
+async function copyLink() {
+  try { await navigator.clipboard.writeText(link); $("copyBtn").textContent = "✅ 已複製"; }
+  catch (e) { prompt("長按複製這個連結：", link); }
+  setTimeout(() => $("copyBtn").textContent = "📋 複製連結", 2000);
+}
+</script>
+</body>
+</html>
