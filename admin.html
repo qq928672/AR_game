@@ -6,6 +6,8 @@
 <meta name="robots" content="noindex">
 <title>Lamby 老師後台</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="config.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
 <style>
   :root { --o:#ff7043; --od:#e65100; --bg:#fff8e1; --line:#f0e0c0; --g:#2e7d32; --r:#c62828; }
   * { box-sizing:border-box; }
@@ -65,6 +67,10 @@
   details ol { line-height:1.9; padding-left:22px; }
   code { background:#f5f5f5; padding:1px 6px; border-radius:4px; }
   .empty { text-align:center; color:#999; padding:30px; }
+  .who { font-size:13px; color:#888; }
+  .tools { display:contents; }
+  body:not(.linked) .tools, body:not(.linked) .authonly, body:not(.linked) #list { display:none; }
+  body.authed #loginBox { display:none; }
   @media (max-width:560px) { .q .qr { display:none; } .row2 { grid-template-columns:1fr; } .q .num { width:42px; height:42px; font-size:16px; } }
 </style>
 </head>
@@ -72,47 +78,44 @@
 
 <header>
   <img src="lamby.png" alt="">
-  <h1>Lamby 老師後台<span class="badge" id="dirty">尚未發布</span></h1>
-  <button class="primary" onclick="openEditor(null)">＋ 新增題目</button>
-  <button onclick="compact()">🔢 重新編號</button>
-  <button onclick="openQR()">🖨 列印 QR Code</button>
-  <button class="green" id="publishBtn" onclick="publish()">發布到網站</button>
+  <h1>Lamby 老師後台<span class="badge" id="dirty">尚未儲存</span></h1>
+  <span class="who" id="who"></span>
+  <span class="tools">
+    <button class="primary" onclick="openEditor(null)">＋ 新增題目</button>
+    <button onclick="compact()">🔢 重新編號</button>
+    <button onclick="openQR()">🖨 列印 QR Code</button>
+    <button onclick="reloadList()">🔄 重新載入</button>
+    <button class="green" id="publishBtn" onclick="publish()">💾 儲存到雲端</button>
+    <button onclick="logout()">登出</button>
+  </span>
 </header>
 
 <main>
   <div class="status" id="status"></div>
 
-  <details class="panel" id="setupBox">
-    <summary>⚙️ GitHub 連線設定（第一次使用請先設定）</summary>
-    <div class="row2">
-      <div><label>GitHub 帳號</label><input type="text" id="owner"></div>
-      <div><label>Repository 名稱</label><input type="text" id="repo"></div>
-    </div>
-    <label>發布金鑰（Token）<small>只存在這台電腦的瀏覽器裡，不會給別人看到</small></label>
-    <input type="password" id="token" placeholder="github_pat_...">
-    <div class="foot">
-      <button onclick="forgetToken()">清除金鑰</button>
-      <button class="primary" onclick="saveSettings()">儲存設定並重新載入題目</button>
-    </div>
-    <details style="margin-top:12px">
-      <summary>怎麼取得發布金鑰？</summary>
-      <ol>
-        <li>登入 GitHub，打開 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank">建立 Fine-grained token</a></li>
-        <li><b>Token name</b> 輸入 <code>Lamby 後台</code>；<b>Expiration</b> 選一個期限（例如 1 年）</li>
-        <li><b>Repository access</b> 選 <b>Only select repositories</b>，選 <code>AR_game</code></li>
-        <li><b>Permissions → Repository permissions → Contents</b> 改成 <b>Read and write</b></li>
-        <li>按最下面 <b>Generate token</b>，複製 <code>github_pat_</code> 開頭的文字，貼到上面的欄位</li>
-      </ol>
-      這把金鑰只能修改 AR_game 這個 repository，不能動你帳號的其他東西。請不要分享給學生。
-    </details>
-  </details>
+  <div class="panel" id="loginBox">
+    <h2 style="margin-top:0;color:var(--od)">請用 Google 帳號登入</h2>
+    <p>只有管理者加入名單的帳號可以使用後台。若顯示「沒有使用權限」，請把你的 Gmail 告訴管理者。</p>
+    <div id="gbtn"></div>
+  </div>
+
+  <div class="panel" id="setupBox" style="display:none">
+    <h2 style="margin-top:0;color:var(--od)">建立我的題庫</h2>
+    <p>第一次使用，請按下面的按鈕。系統會在<b>你自己的 Google Drive</b> 建立：</p>
+    <ul>
+      <li>一份「Lamby 題庫」試算表（存題目），並分享給管理者 <b id="ownerMail"></b>，讓網站能讀寫</li>
+      <li>一個「Lamby 圖片」資料夾（存題目圖片），設定為「知道連結的人可以檢視」，學生才看得到圖片</li>
+    </ul>
+    <p style="color:#888;font-size:14px">按下後 Google 會詢問是否允許本網站「查看及管理它建立的 Google Drive 檔案」，請按允許。網站只能存取它自己建立的檔案，看不到你 Drive 裡其他的東西。</p>
+    <button class="primary" id="setupBtn" onclick="createBank()">📁 建立我的題庫</button>
+  </div>
 
   <div id="list"></div>
 
-  <div class="panel" style="font-size:14px;color:#666">
+  <div class="panel authonly" style="font-size:14px;color:#666">
     💡 小提醒：題號固定不變，刪除題目不會影響其他題的 QR Code。
     新增題目後，按上方「🖨 列印 QR Code」印出新題目的 QR Code。
-    按「發布到網站」後，約 1 分鐘學生端就會更新。
+    題目存在 Google 試算表、圖片存在 Google Drive；按「儲存到雲端」後，學生端約 2 分鐘內更新。
   </div>
 </main>
 
@@ -151,28 +154,131 @@
 
 <script>
 const $ = id => document.getElementById(id);
-let questions = [], sha = null, dirty = false, editingId = null;
+let questions = [], version = null, dirty = false, editingId = null;
+const CFG = window.LAMBY_CONFIG || {};
 
-/* ---------- 設定 ---------- */
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
-function guessOwnerRepo() {
-  const m = location.hostname.match(/^([^.]+)\.github\.io$/);
-  return { owner: m ? m[1] : "qq928672", repo: location.pathname.split("/").filter(Boolean)[0] || "AR_game" };
+function sstore(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { return null; } }
+
+/* ---------- Google 登入 ---------- */
+// ID Token 只放在這個分頁的 sessionStorage，關掉分頁就消失；約 1 小時後過期
+let idToken = sstore("lamby_idtoken") || "";
+const tokenExp = t => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp * 1000; } catch (e) { return 0; } };
+const tokenValid = () => idToken && tokenExp(idToken) > Date.now() + 60 * 1000;
+let me = null;   // { email, code, linked, folderId, ownerEmail }
+function setAuthed(v, info) {
+  me = v ? info : null;
+  document.body.classList.toggle("authed", v);
+  document.body.classList.toggle("linked", v && info.linked);
+  $("setupBox").style.display = v && !info.linked ? "" : "none";
+  $("who").textContent = v ? `👤 ${info.email}（代碼 ${info.code}）` : "";
+  if (v) $("ownerMail").textContent = info.ownerEmail;
 }
-function loadSettings() {
-  const g = guessOwnerRepo();
-  $("owner").value = store("gh_owner") || g.owner;
-  $("repo").value = store("gh_repo") || g.repo;
-  $("token").value = store("gh_token") || "";
-  if (!$("token").value) $("setupBox").open = true;
+function initGoogle() {
+  if (!CFG.API_URL || !CFG.GOOGLE_CLIENT_ID) return msg("err", "還沒有設定 config.js 的 API_URL 和 GOOGLE_CLIENT_ID，請照 GOOGLE-SETUP.md 設定。");
+  if (!window.google?.accounts?.id) return setTimeout(initGoogle, 200);     // 等 Google 登入元件載入
+  google.accounts.id.initialize({ client_id: CFG.GOOGLE_CLIENT_ID, callback: onCredential, auto_select: true });
+  google.accounts.id.renderButton($("gbtn"), { theme: "filled_blue", size: "large", text: "signin_with", locale: "zh-TW" });
+  if (tokenValid()) whoami(); else google.accounts.id.prompt();
 }
-function saveSettings() {
-  store("gh_owner", $("owner").value.trim()); store("gh_repo", $("repo").value.trim()); store("gh_token", $("token").value.trim());
-  load();
+function onCredential(res) { idToken = res.credential; sstore("lamby_idtoken", idToken); whoami(); }
+async function whoami() {
+  try {
+    const info = await api("whoami");
+    setAuthed(true, info);
+    if (!info.linked) msg("info", "歡迎！請先建立你的題庫。");
+    else if (dirty) msg("ok", "已重新登入，請再按一次「💾 儲存到雲端」。");
+    else load();
+  } catch (e) { /* api() 已顯示錯誤 */ }
 }
-function forgetToken() { store("gh_token", null); $("token").value = ""; msg("info", "已清除這台電腦上的金鑰。"); }
-const api = (path = "questions.json") => `https://api.github.com/repos/${$("owner").value.trim()}/${$("repo").value.trim()}/contents/${path}`;
-const headers = () => ({ "Authorization": "Bearer " + $("token").value.trim(), "Accept": "application/vnd.github+json" });
+
+/* ---------- 老師自己的 Google Drive（只能存取本網站建立的檔案） ---------- */
+let driveToken = null, driveTokenExp = 0, tokenClient = null;
+function getDriveToken() {
+  if (driveToken && driveTokenExp > Date.now() + 60 * 1000) return Promise.resolve(driveToken);
+  return new Promise((ok, fail) => {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CFG.GOOGLE_CLIENT_ID, scope: "https://www.googleapis.com/auth/drive.file", hint: me?.email,
+      callback: r => { if (r.error) return fail(new Error("沒有取得 Google Drive 授權")); driveToken = r.access_token;
+                       driveTokenExp = Date.now() + r.expires_in * 1000; ok(driveToken); },
+      error_callback: () => fail(new Error("Google Drive 授權視窗被關閉或被瀏覽器擋住了，請允許彈出視窗後再試一次"))
+    });
+    tokenClient.requestAccessToken({ prompt: "" });
+  });
+}
+async function drive(path, opts = {}) {
+  const r = await fetch("https://www.googleapis.com/" + path, { ...opts,
+    headers: { Authorization: "Bearer " + await getDriveToken(), ...(opts.headers || {}) } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error("Google Drive 錯誤：" + (j.error?.message || r.status));
+  return j;
+}
+const driveJson = (path, body) => drive(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const DRIVE = "drive/v3/files";
+
+async function createBank() {
+  $("setupBtn").disabled = true;
+  try {
+    msg("info", "建立圖片資料夾…");
+    const folder = await driveJson(DRIVE, { name: "Lamby 圖片", mimeType: "application/vnd.google-apps.folder" });
+    await driveJson(`${DRIVE}/${folder.id}/permissions`, { role: "reader", type: "anyone" });
+    msg("info", "建立題庫試算表…");
+    const sheet = await driveJson(DRIVE, { name: "Lamby 題庫", mimeType: "application/vnd.google-apps.spreadsheet" });
+    await driveJson(`${DRIVE}/${sheet.id}/permissions?sendNotificationEmail=false`, { role: "writer", type: "user", emailAddress: me.ownerEmail });
+    msg("info", "連結題庫…");
+    await api("link", { sheetId: sheet.id, folderId: folder.id });
+    await whoami();
+    msg("ok", "✅ 題庫建立完成！在你的 Google Drive 可以看到「Lamby 題庫」和「Lamby 圖片」。現在可以按「＋ 新增題目」了。");
+  } catch (e) { if (!$("status").textContent || e.message !== $("status").textContent) msg("err", "建立失敗：" + e.message); }
+  $("setupBtn").disabled = false;
+}
+
+/** 圖片上傳到老師自己的「Lamby 圖片」資料夾，回傳學生看得到的圖片網址 */
+async function uploadToDrive(dataUrl) {
+  const [head, b64] = dataUrl.split(","), type = head.match(/data:([^;]+)/)[1];
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const meta = { name: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${type === "image/png" ? "png" : "jpg"}`, parents: [me.folderId] };
+  const form = new FormData();
+  form.append("metadata", new Blob([JSON.stringify(meta)], { type: "application/json" }));
+  form.append("file", new Blob([bytes], { type }));
+  const f = await drive("upload/drive/v3/files?uploadType=multipart&fields=id", { method: "POST", body: form });
+  await driveJson(`${DRIVE}/${f.id}/permissions`, { role: "reader", type: "anyone" });
+  return "https://lh3.googleusercontent.com/d/" + f.id;
+}
+function logout() {
+  if (dirty && !confirm("還有修改沒有儲存，確定要登出嗎？")) return;
+  idToken = ""; sstore("lamby_idtoken", null);
+  questions = []; setDirty(false); render();
+  google.accounts.id.disableAutoSelect();
+  setAuthed(false); msg("info", "已登出。");
+}
+
+/* ---------- 呼叫 Apps Script 後端 ---------- */
+// 用 text/plain 送出，避免瀏覽器先送 CORS 預檢（Apps Script 不支援）
+async function api(action, data = {}) {
+  if (!tokenValid()) { needLogin("登入已過期，請重新登入（你的修改還在，不會不見）。"); throw new Error("auth"); }
+  let j;
+  try {
+    const r = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+                                         body: JSON.stringify({ action, idToken, ...data }) });
+    j = await r.json();
+  } catch (e) { msg("err", "連不上雲端，請檢查網路後再試一次。"); throw e; }
+  if (!j.ok) {
+    if (j.code === "auth" || j.code === "forbidden") needLogin(j.error, j.code === "forbidden");
+    else msg("err", j.error);
+    const err = new Error(j.error); err.code = j.code; throw err;
+  }
+  return j;
+}
+function needLogin(text, forbidden) {
+  idToken = ""; sstore("lamby_idtoken", null);
+  if (forbidden) { setAuthed(false); google.accounts.id.disableAutoSelect(); }
+  else if (!dirty) setAuthed(false);
+  msg("err", text);
+  if (!forbidden) { const b = document.createElement("div"); b.style.marginTop = "8px"; $("status").appendChild(b);
+    google.accounts.id.renderButton(b, { theme: "outline", size: "medium", text: "signin_with", locale: "zh-TW" }); }
+}
 
 function msg(type, text) { const s = $("status"); s.className = "status show " + type; s.textContent = text; }
 function setDirty(v) {
@@ -181,28 +287,19 @@ function setDirty(v) {
 }
 window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 
-/* ---------- UTF-8 與 base64 ---------- */
-const toB64 = str => btoa(unescape(encodeURIComponent(str)));
-const fromB64 = b64 => decodeURIComponent(escape(atob(b64.replace(/\n/g, ""))));
-
-/* ---------- 讀取題目 ---------- */
+/* ---------- 讀取題目（Google 試算表） ---------- */
 async function load() {
   msg("info", "讀取題目中…");
   try {
-    if ($("token").value.trim()) {
-      const r = await fetch(api() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
-      if (r.status === 401) throw new Error("金鑰無效或已過期，請重新設定。");
-      if (r.status === 404) throw new Error("找不到 questions.json，請確認帳號和 repository 名稱，以及金鑰有勾選這個 repository。");
-      if (!r.ok) throw new Error("GitHub 回應錯誤：" + r.status);
-      const j = await r.json(); sha = j.sha; questions = JSON.parse(fromB64(j.content));
-      msg("ok", "已讀取 " + questions.length + " 題。修改完記得按「發布到網站」。");
-    } else {
-      const r = await fetch("questions.json?t=" + Date.now(), { cache: "no-store" });
-      questions = await r.json(); sha = null;
-      msg("info", "目前是唯讀模式：可以編輯和預覽，但要設定發布金鑰才能發布。");
-    }
+    const j = await api("list");
+    questions = j.questions; version = j.version;
     sortQ(); setDirty(false); render();
-  } catch (e) { msg("err", "讀取失敗：" + e.message); }
+    msg("ok", "已讀取 " + questions.length + " 題。修改完記得按「💾 儲存到雲端」。");
+  } catch (e) { /* api() 已顯示錯誤 */ }
+}
+function reloadList() {
+  if (dirty && !confirm("重新載入會放棄還沒儲存的修改，確定嗎？")) return;
+  load();
 }
 
 /* ---------- 題目列表 ---------- */
@@ -232,10 +329,11 @@ function render() {
     </div>`).join("");
   questions.forEach(q => { if (window.QRCode) new QRCode($("qr_" + q.id), { text: gameUrl(q.id), width: 192, height: 192 }); });
 }
-const gameUrl = id => location.href.replace(/admin\.html.*$/, "index.html") + "?id=" + id;
+// 學生網址帶老師代碼 c，網站才知道要讀哪位老師的題庫
+const gameUrl = id => location.href.replace(/admin\.html.*$/, "index.html") + "?c=" + me.code + "&id=" + id;
 function openQR(only) {
   store("lambyDraft", JSON.stringify(questions));
-  window.open("qrcodes.html?draft=1" + (only ? "&only=" + only : ""), "_blank");
+  window.open("qrcodes.html?draft=1&c=" + me.code + (only ? "&only=" + only : ""), "_blank");
 }
 /* ---------- 題號：交換、遞補、重新編號 ---------- */
 // map = { 舊題號: 新題號 }。會一起更新所有線索裡的「N 號」
@@ -249,7 +347,7 @@ function applyIdMap(map, note) {
   sortQ(); setDirty(true); render();
   const newIds = changed.map(k => map[k]).sort((a, b) => a - b);
   msg("err", (note ? note + " " : "") + `題號已更新：${changed.map(k => k + "→" + map[k]).join("、")}。線索裡的「N 號」也已自動更新。`
-      + `⚠️ 發布後請重印第 ${newIds.join("、")} 題的 QR Code（舊的 QR Code 會對應到不同題目）。`);
+      + `⚠️ 儲存後請重印第 ${newIds.join("、")} 題的 QR Code（舊的 QR Code 會對應到不同題目）。`);
   showReprint(newIds);
 }
 function showReprint(ids) {
@@ -275,14 +373,14 @@ function removeQ(id) {
   const later = questions.filter(x => x.id > id);
   if (later.length && confirm(`要讓後面的題目自動往前遞補嗎？\n（第 ${later.map(x => x.id).join("、")} 題會各減 1，這些題目要重印 QR Code）`)) {
     const map = {}; later.forEach(x => map[x.id] = x.id - 1);
-    return applyIdMap(map, `已刪除第 ${id} 題（還沒發布）。`);
+    return applyIdMap(map, `已刪除第 ${id} 題（還沒儲存）。`);
   }
   // 檢查有沒有其他題目的線索還叫學生去找這一題
   const refs = questions.filter(x => new RegExp("(^|[^0-9])" + id + "\\s*號").test(x.clue?.text || "")).map(x => x.id);
-  msg(refs.length ? "err" : "info", `已刪除第 ${id} 題（還沒發布）。已經印好的第 ${id} 號 QR Code 會失效，請記得收回。`
+  msg(refs.length ? "err" : "info", `已刪除第 ${id} 題（還沒儲存）。已經印好的第 ${id} 號 QR Code 會失效，請記得收回。`
       + (refs.length ? `⚠️ 第 ${refs.join("、")} 題的線索還寫著「${id} 號」，請記得編輯修改。` : ""));
 }
-function preview(id) { store("lambyDraft", JSON.stringify(questions)); window.open(`index.html?id=${id}&preview=1`, "_blank"); }
+function preview(id) { store("lambyDraft", JSON.stringify(questions)); window.open(`index.html?c=${me.code}&id=${id}&preview=1`, "_blank"); }
 
 /* ---------- 圖片：選圖、自動縮小 ---------- */
 const ansIdx = q => (q.answerIndex ?? q.options.indexOf(q.answer));
@@ -369,55 +467,49 @@ function saveEditor() {
                  answer: opts[answerIndex] || ("圖片 " + (answerIndex + 1)), clue: { code: $("f_code").value.trim(), text: $("f_text").value.trim() } };
   if (editingId == null) {
     questions.push({ id: newId, ...data }); sortQ();
-    msg("info", `已新增第 ${newId} 題（還沒發布）。發布後記得印第 ${newId} 號 QR Code。`);
+    msg("info", `已新增第 ${newId} 題（還沒儲存）。儲存後記得印第 ${newId} 號 QR Code。`);
     showReprint([newId]);
   } else {
     const t = questions.find(x => x.id === editingId); delete t.say; Object.assign(t, data);
     closeEditor();
-    if (newId !== editingId) return applyIdMap({ [editingId]: newId }, `已修改第 ${editingId} 題（還沒發布）。`);
-    msg("info", `已修改第 ${editingId} 題（還沒發布）。`);
+    if (newId !== editingId) return applyIdMap({ [editingId]: newId }, `已修改第 ${editingId} 題（還沒儲存）。`);
+    msg("info", `已修改第 ${editingId} 題（還沒儲存）。`);
   }
   setDirty(true); render(); closeEditor();
 }
 
-/* ---------- 發布 ---------- */
+/* ---------- 儲存到雲端（圖片 → Google Drive，題目 → Google 試算表） ---------- */
 async function publish() {
-  if (!$("token").value.trim()) { $("setupBox").open = true; return msg("err", "請先設定發布金鑰，才能發布到網站。"); }
-  if (!dirty && !confirm("目前沒有新的修改，還是要發布嗎？")) return;
-  $("publishBtn").disabled = true; msg("info", "發布中…");
+  if (!dirty && !confirm("目前沒有新的修改，還是要儲存嗎？")) return;
+  $("publishBtn").disabled = true;
   try {
-    // 1. 先把新選的圖片上傳到 images/ 資料夾
+    // 1. 新選的圖片（還是 data: 格式）先上傳到 Drive，換成 Drive 圖片網址
     const pending = new Set();
     questions.forEach(q => { if (q.image?.startsWith("data:")) pending.add(q.image); (q.optionImages || []).forEach(x => x?.startsWith("data:") && pending.add(x)); });
-    const uploaded = {}; let n = 0;
+    let n = 0;
     for (const dataUrl of pending) {
-      msg("info", `上傳圖片中… (${++n}/${pending.size})`);
-      const ext = dataUrl.startsWith("data:image/png") ? "png" : "jpg";
-      const path = `images/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-      const r = await fetch(api(path), { method: "PUT", headers: headers(), body: JSON.stringify({ message: "後台上傳圖片", content: dataUrl.split(",")[1] }) });
-      if (!r.ok) throw new Error((r.status === 403 || r.status === 401) ? "金鑰沒有寫入權限，請確認 Contents 是 Read and write。" : "圖片上傳失敗（" + r.status + "）");
-      uploaded[dataUrl] = path;
+      msg("info", `上傳圖片到你的 Google Drive… (${++n}/${pending.size})`);
+      const url = await uploadToDrive(dataUrl);
+      // 每傳完一張就換掉，中途失敗時已上傳的圖片不會重複上傳
+      questions.forEach(q => {
+        if (q.image === dataUrl) q.image = url;
+        if (q.optionImages) q.optionImages = q.optionImages.map(x => x === dataUrl ? url : x);
+      });
     }
-    questions.forEach(q => {
-      if (uploaded[q.image]) q.image = uploaded[q.image];
-      if (q.optionImages) q.optionImages = q.optionImages.map(x => uploaded[x] || x);
-    });
-    msg("info", "發布題目中…");
-    // 2. 先抓最新版本編號，避免和別台電腦的修改衝突
-    const cur = await fetch(api() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
-    if (cur.ok) sha = (await cur.json()).sha;
-    const r = await fetch(api(), { method: "PUT", headers: headers(), body: JSON.stringify({
-      message: "後台更新題目（" + questions.length + " 題）",
-      content: toB64(JSON.stringify(questions, null, 2) + "\n"), sha: sha || undefined }) });
-    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error((r.status === 403 || r.status === 401) ? "金鑰沒有寫入權限，請確認 Contents 是 Read and write。" : (j.message || r.status)); }
-    sha = (await r.json()).content.sha;
-    setDirty(false); render();
-    msg("ok", "✅ 發布成功！約 1 分鐘後，學生掃 QR Code 就會看到新題目。");
-  } catch (e) { msg("err", "發布失敗：" + e.message); }
+    // 2. 整份題目寫進試算表；如果別的老師在這之間改過，後端會拒絕，避免互相蓋掉
+    msg("info", "儲存題目到 Google 試算表…");
+    const j = await api("save", { questions, baseVersion: version });
+    questions = j.questions; version = j.version;
+    sortQ(); setDirty(false); render();
+    msg("ok", "✅ 儲存成功！學生端約 2 分鐘內會看到新題目。");
+  } catch (e) {
+    if (e.code === "conflict") { const b = document.createElement("button"); b.textContent = "🔄 重新載入"; b.style.marginLeft = "10px";
+      b.onclick = reloadList; $("status").appendChild(b); }
+  }
   $("publishBtn").disabled = false;
 }
 
-loadSettings(); load();
+initGoogle();
 </script>
 </body>
 </html>

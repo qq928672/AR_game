@@ -112,8 +112,9 @@
   <button onclick="location.reload()">再玩一次</button>
 </div>
 
+<script src="config.js"></script>
 <script>
-/* ===== 題目放在 questions.json，請用 admin.html（老師後台）新增／修改／刪除 =====
+/* ===== 題目放在 Google 試算表（見 config.js），請用 admin.html（老師後台）新增／修改／刪除 =====
    每一個 QR Code 對應網址 index.html?id=題號                                         */
 const params = new URLSearchParams(location.search);
 const id = params.get("id") || "1";
@@ -123,6 +124,15 @@ async function loadQuestions() {
   // 預覽模式：老師在後台按「預覽」時，用還沒發布的草稿
   if (params.get("preview")) {
     try { const d = JSON.parse(localStorage.getItem("lambyDraft") || "null"); if (d) return d; } catch (e) {}
+  }
+  // 有設定 Apps Script 就讀 Google 試算表；沒設定就讀 questions.json（舊方式）
+  const api = (window.LAMBY_CONFIG || {}).API_URL;
+  if (api) {
+    // c = 老師代碼；舊的 QR Code 沒有 c，會讀管理者的題庫
+    const c = encodeURIComponent(params.get("c") || "");
+    const j = await (await fetch(api + "?action=questions&code=" + c + "&_=" + Date.now())).json();
+    if (!j.ok) throw new Error(j.error);
+    return j.questions;
   }
   const r = await fetch("questions.json?t=" + Date.now(), { cache: "no-store" });
   return r.json();

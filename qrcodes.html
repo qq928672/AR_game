@@ -26,6 +26,7 @@
   <span id="info" style="color:#888"></span>
 </div>
 <div class="grid" id="grid"></div>
+<script src="config.js"></script>
 <script>
 let questions = [];
 document.getElementById("base").value = location.href.replace(/qrcodes\.html.*$/, "index.html");
@@ -37,24 +38,28 @@ function loadList() {
   if (params.get("draft")) {
     try { const d = JSON.parse(localStorage.getItem("lambyDraft") || "null"); if (d) { fromDraft = true; return Promise.resolve(d); } } catch (e) {}
   }
+  const api = (window.LAMBY_CONFIG || {}).API_URL;
+  if (api) return fetch(api + "?action=questions&code=" + encodeURIComponent(params.get("c") || "") + "&_=" + Date.now()).then(r => r.json())
+                    .then(j => { if (!j.ok) throw new Error(j.error); return j.questions; });
   return fetch("questions.json?t=" + Date.now(), { cache: "no-store" }).then(r => r.json());
 }
 loadList().then(q => { questions = q; build(); })
-  .catch(() => document.getElementById("info").textContent = "讀不到 questions.json");
+  .catch(() => document.getElementById("info").textContent = "讀不到題目，請檢查網路後重新整理");
 // 後台有修改時，這一頁自動跟著更新
 window.addEventListener("storage", e => { if (fromDraft && e.key === "lambyDraft" && e.newValue) { questions = JSON.parse(e.newValue); build(); } });
 function build() {
   const base = document.getElementById("base").value.trim();
   const only = document.getElementById("only").value.split(/[,，\s]+/).filter(Boolean);
   const list = only.length ? questions.filter(q => only.includes(String(q.id))) : questions;
-  document.getElementById("info").textContent = "共 " + list.length + " 張" + (fromDraft ? "（使用後台目前的題目；新題目要先發布，學生才掃得到）" : "");
+  document.getElementById("info").textContent = "共 " + list.length + " 張" + (fromDraft ? "（使用後台目前的題目；新題目要先儲存到雲端，學生才掃得到）" : "");
   const grid = document.getElementById("grid"); grid.innerHTML = "";
   list.forEach(q => {
     const c = document.createElement("div"); c.className = "card";
     c.innerHTML = `<h2><img class="lamby" src="lamby.png" alt=""> Puzzle ${q.id}</h2><div class="qr"></div><p>用平板掃我！</p><div class="t"></div>`;
     c.querySelector(".t").textContent = q.q;
     grid.appendChild(c);
-    new QRCode(c.querySelector(".qr"), { text: `${base}?id=${q.id}`, width: 220, height: 220 });
+    const code = params.get("c");   // 老師代碼，學生掃了才會讀到這位老師的題庫
+    new QRCode(c.querySelector(".qr"), { text: `${base}?${code ? "c=" + encodeURIComponent(code) + "&" : ""}id=${q.id}`, width: 220, height: 220 });
   });
 }
 </script>
