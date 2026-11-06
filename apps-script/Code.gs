@@ -15,7 +15,6 @@
 
 // ======== 需要你填的設定 ========
 const CLIENT_ID = '請貼上 OAuth 用戶端 ID（xxxx.apps.googleusercontent.com）';
-const SITE_URL  = 'https://qq928672.github.io/AR_game/';   // 匯入舊題庫、舊圖片時使用
 // ================================
 
 const T_SHEET = 'teachers';
@@ -133,15 +132,13 @@ function needLinked_(t) {
 /** 老師在後台按「建立我的題庫」後，記錄他的試算表和圖片資料夾 */
 function link_(t, sheetId, folderId) {
   if (!/^[\w-]{20,}$/.test(sheetId || '') || !/^[\w-]{20,}$/.test(folderId || '')) throw fail_('試算表或資料夾 ID 不正確');
-  let file;
-  try { file = DriveApp.getFileById(sheetId); }
+  let ss;
+  try { ss = SpreadsheetApp.openById(sheetId); }   // 不是試算表、或沒分享給管理者，這裡都會失敗
   catch (_) { throw fail_('管理者無法開啟你的試算表，請確認已分享給 ' + ownerEmail_() + '（編輯者）。'); }
   // 只能連結「自己擁有」的試算表，避免把別人的題庫接到自己名下
-  const owner = file.getOwner() && file.getOwner().getEmail().toLowerCase();
-  if (owner !== t.email) throw fail_('這份試算表的擁有者不是你（' + t.email + '）。');
-  if (file.getMimeType() !== MimeType.GOOGLE_SHEETS) throw fail_('這不是 Google 試算表');
+  const o = ss.getOwner();
+  if (!o || o.getEmail().toLowerCase() !== t.email) throw fail_('這份試算表的擁有者不是你（' + t.email + '）。');
 
-  const ss = SpreadsheetApp.openById(sheetId);
   let qs = ss.getSheetByName(Q_SHEET);
   if (!qs) { qs = ss.getSheets()[0]; qs.setName(Q_SHEET); }
   qs.getRange(1, 1, 1, Q_HEAD.length).setValues([Q_HEAD]).setFontWeight('bold');
@@ -283,34 +280,7 @@ function setup() {
   sh.setFrozenRows(1);
   const owner = ownerEmail_();
   if (sh.getLastRow() < 2 && owner) sh.appendRow(['main', owner, '管理者', true, '', '', '']);
-  // 讓授權畫面一次把需要的權限都要齊
-  DriveApp.getRootFolder(); UrlFetchApp.getRequest('https://www.google.com');
   Logger.log('完成！請到 teachers 工作表確認。接著部署網頁應用程式，並在後台登入建立你的題庫。');
 }
 
-/**
- * 2. 把 GitHub 網站上的 questions.json 和 images/ 圖片搬到「main」老師（管理者自己）的題庫。
- *    請先在後台登入並按「建立我的題庫」，再執行這個函式（只需執行一次）。
- */
-function importFromSite() {
-  const t = findTeacher_('code', 'main');
-  if (!t || !t.sheetId || !t.folderId) throw new Error('請先在後台用管理者帳號登入，按「建立我的題庫」');
-  const folder = DriveApp.getFolderById(t.folderId);
-  const list = JSON.parse(UrlFetchApp.fetch(SITE_URL + 'questions.json?_=' + Date.now()).getContentText());
-  const moved = {};
-  const move = function (u) {
-    if (!u || /^https:\/\//.test(u)) return u || '';
-    if (moved[u]) return moved[u];
-    const blob = UrlFetchApp.fetch(SITE_URL + u).getBlob().setName(u.split('/').pop());
-    const file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    return (moved[u] = 'https://lh3.googleusercontent.com/d/' + file.getId());
-  };
-  list.forEach(function (q) {
-    q.image = move(q.image);
-    q.optionImages = (q.optionImages || []).map(move);
-    if (q.answerIndex == null) q.answerIndex = Math.max(0, q.options.indexOf(q.answer));
-  });
-  const r = saveQuestions_(t, list, null);
-  Logger.log('匯入 ' + r.questions.length + ' 題，搬移 ' + Object.keys(moved).length + ' 張圖片。');
-}
+// 舊題目的匯入已改成在後台按「📥 匯入舊題目」（由瀏覽器處理），這支程式不再需要任何 Google Drive 權限。

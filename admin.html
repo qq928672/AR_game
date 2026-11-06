@@ -85,6 +85,8 @@
     <button onclick="compact()">🔢 重新編號</button>
     <button onclick="openQR()">🖨 列印 QR Code</button>
     <button onclick="reloadList()">🔄 重新載入</button>
+    <button onclick="importOld()" title="把網站上舊的 questions.json 題目和 images/ 圖片搬進你的題庫">📥 匯入舊題目</button>
+    <button onclick="cleanupImages(true)" title="把沒用到的圖片移到「_回收區」資料夾（不會刪除）">🧹 整理圖片</button>
     <button class="green" id="publishBtn" onclick="publish()">💾 儲存到雲端</button>
     <button onclick="logout()">登出</button>
   </span>
@@ -231,6 +233,67 @@ async function createBank() {
     msg("ok", "✅ 題庫建立完成！在你的 Google Drive 可以看到「Lamby 題庫」和「Lamby 圖片」。現在可以按「＋ 新增題目」了。");
   } catch (e) { if (!$("status").textContent || e.message !== $("status").textContent) msg("err", "建立失敗：" + e.message); }
   $("setupBtn").disabled = false;
+}
+
+/* ---------- 匯入舊題目：網站上的 questions.json 和 images/ 圖片 → 自己的題庫與 Drive ---------- */
+const blobToDataUrl = b => new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fail; r.readAsDataURL(b); });
+async function importOld() {
+  if (questions.length && !confirm(`目前題庫已有 ${questions.length} 題。匯入會用舊題目「取代」目前所有題目（儲存前還可以按「🔄 重新載入」反悔）。要繼續嗎？`)) return;
+  if (dirty && !confirm("目前有還沒儲存的修改，匯入後會被取代。要繼續嗎？")) return;
+  msg("info", "讀取舊題目…");
+  try {
+    const r = await fetch("questions.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("找不到網站上的 questions.json");
+    const list = await r.json(), cache = {};
+    const conv = async u => {                       // 網站上的相對路徑圖片 → data URL，儲存時會一起上傳到你的 Drive
+      if (!u || /^(https:|data:)/.test(u)) return u || "";
+      if (!cache[u]) { const x = await fetch(u); if (!x.ok) throw new Error("讀不到圖片 " + u); cache[u] = await blobToDataUrl(await x.blob()); }
+      return cache[u];
+    };
+    for (const q of list) {
+      q.image = await conv(q.image);
+      q.optionImages = await Promise.all((q.optionImages || []).map(conv));
+      if (q.answerIndex == null) q.answerIndex = Math.max(0, q.options.indexOf(q.answer));
+      delete q.say;
+    }
+    questions = list; sortQ(); setDirty(true); render();
+    msg("info", `已讀入 ${list.length} 題，正在儲存到你的題庫…`);
+    await publish();
+  } catch (e) { msg("err", "匯入失敗：" + e.message); }
+}
+
+/* ---------- 整理圖片：沒用到的圖片「移到」子資料夾，不刪除 ---------- */
+// 移動不會改變檔案 ID 和分享設定，所以舊連結、舊教材都照常能開；要找回來，從「_回收區」拖回上一層即可。
+const RECYCLE = "_回收區";
+const imgId = u => (String(u || "").match(/\/d\/([\w-]+)/) || [])[1];
+async function recycleFolder() {
+  const q = encodeURIComponent(`'${me.folderId}' in parents and name='${RECYCLE}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await drive(`${DRIVE}?q=${q}&fields=files(id)`);
+  if (r.files?.length) return r.files[0].id;
+  return (await driveJson(DRIVE, { name: RECYCLE, mimeType: "application/vnd.google-apps.folder", parents: [me.folderId] })).id;
+}
+async function cleanupImages(manual) {
+  if (!me?.folderId) return;
+  // 自動整理不會跳出授權視窗；沒有有效授權就跳過，等老師按「🧹 整理圖片」
+  if (!manual && !(driveToken && driveTokenExp > Date.now() + 60 * 1000)) return;
+  if (dirty) { if (manual) msg("err", "請先按「💾 儲存到雲端」再整理圖片，以免誤把還在用的圖片移走。"); return; }
+  try {
+    // 以雲端試算表目前的內容為準，不是這個畫面的內容
+    const fresh = (await api("list")).questions;
+    if (!fresh.length) { if (manual) msg("info", "目前沒有題目，不做整理。"); return; }
+    const used = new Set();
+    fresh.forEach(q => [q.image, ...(q.optionImages || [])].forEach(u => { const i = imgId(u); if (i) used.add(i); }));
+    const q = encodeURIComponent(`'${me.folderId}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`);
+    const files = (await drive(`${DRIVE}?q=${q}&fields=files(id,createdTime)&pageSize=1000`)).files || [];
+    // 一小時內剛上傳的先不動，避免另一台裝置正在儲存
+    const unused = files.filter(f => !used.has(f.id) && Date.now() - new Date(f.createdTime) > 3600 * 1000);
+    if (!unused.length) { if (manual) msg("ok", "圖片都有在使用，沒有需要整理的。"); return; }
+    const rid = await recycleFolder();
+    for (const f of unused)
+      await drive(`${DRIVE}/${f.id}?addParents=${rid}&removeParents=${me.folderId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const note = `🧹 已把 ${unused.length} 張沒用到的圖片移到 Drive「Lamby 圖片」裡的「${RECYCLE}」資料夾（沒有刪除，可以隨時拖回來）。`;
+    if (manual) msg("ok", note); else $("status").textContent += "　" + note;
+  } catch (e) { if (manual && e.message !== "auth") msg("err", "整理圖片失敗：" + e.message); }
 }
 
 /** 圖片上傳到老師自己的「Lamby 圖片」資料夾，回傳學生看得到的圖片網址 */
@@ -502,6 +565,7 @@ async function publish() {
     questions = j.questions; version = j.version;
     sortQ(); setDirty(false); render();
     msg("ok", "✅ 儲存成功！學生端約 2 分鐘內會看到新題目。");
+    await cleanupImages(false);
   } catch (e) {
     if (e.code === "conflict") { const b = document.createElement("button"); b.textContent = "🔄 重新載入"; b.style.marginLeft = "10px";
       b.onclick = reloadList; $("status").appendChild(b); }
