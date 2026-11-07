@@ -7,7 +7,8 @@
  *   題庫試算表分享給管理者（編輯者），讓這支程式能讀寫
  * - 圖片由老師的瀏覽器直接上傳到老師自己的 Drive，不經過這裡
  *
- * - 學生端：GET  <網址>?action=questions&code=老師代碼   → 不用登入
+ * - 學生端：GET  <網址>?action=questions&code=老師代碼   → 不用登入，不含答案和線索
+ *          GET  <網址>?action=check&code=老師代碼&id=題號&a=選項索引 → 答對才回傳線索
  * - 老師端：POST <網址>  { idToken, action, ... }         → 驗證 Google 登入 + teachers 名單
  *
  * 設定方式請看 GOOGLE-SETUP.md。
@@ -31,20 +32,36 @@ const DATA_COLS = 15;   // 前 15 欄是題目內容，後 2 欄是修改時間�
  * ========================================================= */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if ((p.action || 'questions') !== 'questions') return json_({ ok: false, error: '未知的操作' });
+  const action = p.action || 'questions';
+  if (action !== 'questions' && action !== 'check') return json_({ ok: false, error: '未知的操作' });
   try {
     const t = p.code ? findTeacher_('code', p.code) : defaultTeacher_();   // 舊的 QR Code 沒有老師代碼
     if (!t || !t.enabled || !t.sheetId) return json_({ ok: false, error: '找不到這位老師的題目' });
-    const cache = CacheService.getScriptCache(), key = 'q_' + t.code;
-    let body = cache.get(key);
-    if (!body) {
-      body = JSON.stringify({ ok: true, code: t.code, questions: readQuestions_(t).questions });
-      try { cache.put(key, body, 60); } catch (_) { /* 太大就不快取 */ }
+    const list = questionsCached_(t);
+    // 學生端拿到的題目不含正確答案和線索，答對才由 check 回傳線索
+    if (action === 'questions') {
+      return json_({ ok: true, code: t.code, questions: list.map(function (q) {
+        return { id: q.id, q: q.q, sheep: q.sheep, image: q.image, options: q.options, optionImages: q.optionImages };
+      }) });
     }
-    return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
+    const q = list.filter(function (x) { return String(x.id) === String(p.id); })[0];
+    if (!q) return json_({ ok: false, error: '找不到這一題' });
+    const a = Number(p.a);
+    if (!(Number.isInteger(a) && a >= 0 && a < q.options.length)) return json_({ ok: false, error: '答案格式錯誤' });
+    return json_(a === q.answerIndex ? { ok: true, correct: true, clue: q.clue } : { ok: true, correct: false });
   } catch (err) {
     return json_({ ok: false, error: '題目讀取失敗' });
   }
+}
+
+/** 完整題目（含答案）只放在伺服器端快取，不直接回傳給學生 */
+function questionsCached_(t) {
+  const cache = CacheService.getScriptCache(), key = 'q_' + t.code;
+  const hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  const list = readQuestions_(t).questions;
+  try { cache.put(key, JSON.stringify(list), 60); } catch (_) { /* 太大就不快取 */ }
+  return list;
 }
 
 function doPost(e) {
@@ -111,7 +128,7 @@ function teachers_() {
       code: String(r[0]).trim().toLowerCase(),
       email: String(r[1]).trim().toLowerCase(),
       name: String(r[2]).trim(),
-      enabled: r[3] === '' || r[3] === true || String(r[3]).toUpperCase() === 'TRUE',
+      enabled: r[3] === true || String(r[3]).trim().toUpperCase() === 'TRUE',   // 只有明確填 TRUE 才啟用
       sheetId: String(r[4]).trim(),
       folderId: String(r[5]).trim()
     };
@@ -121,8 +138,9 @@ function findTeacher_(field, value) {
   value = String(value).trim().toLowerCase();
   return teachers_().filter(function (t) { return t[field] === value; })[0] || null;
 }
+/** 舊的 QR Code（沒有老師代碼）固定讀管理者 main 的題庫，不會改讀到別位老師 */
 function defaultTeacher_() {
-  return teachers_().filter(function (t) { return t.enabled && t.sheetId; })[0] || null;
+  return findTeacher_('code', 'main');
 }
 function ownerEmail_() { return (Session.getEffectiveUser().getEmail() || '').toLowerCase(); }
 function needLinked_(t) {

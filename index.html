@@ -161,6 +161,7 @@ async function loadQuestions() {
     const c = encodeURIComponent(params.get("c") || "");
     const j = await (await fetch(api + "?action=questions&code=" + c + "&_=" + Date.now())).json();
     if (!j.ok) throw new Error(j.error);
+    j.questions.forEach(q => q.remote = true);     // 雲端題目不含答案，要問伺服器
     return j.questions;
   }
   const r = await fetch("questions.json?t=" + Date.now(), { cache: "no-store" });
@@ -189,14 +190,30 @@ if (P.custom) { document.getElementById("clueLead").textContent = "同學留給�
 if (P.image) document.getElementById("bubbleImg").src = P.image;
 const optsEl = document.getElementById("opts");
 const answerIndex = P.answerIndex ?? P.options.indexOf(P.answer);
+// 雲端題目由伺服器判斷對錯（答對才拿得到線索）；預覽、同學出的題目、questions.json 在本機判斷
+async function checkAnswer(k) {
+  if (!P.remote) return k === answerIndex;
+  const api = window.LAMBY_CONFIG.API_URL, c = encodeURIComponent(params.get("c") || "");
+  const j = await (await fetch(`${api}?action=check&code=${c}&id=${encodeURIComponent(id)}&a=${k}&_=${Date.now()}`)).json();
+  if (!j.ok) throw new Error(j.error);
+  if (j.correct) P.clue = j.clue;
+  return j.correct;
+}
+let checking = false;
 P.options.forEach((o, k) => {
   const b = document.createElement("button");
   b.className = "opt";
   const im = (P.optionImages || [])[k];
   if (im) { const i = document.createElement("img"); i.src = im; i.alt = o; b.appendChild(i); b.classList.add("pic"); }
   if (o) b.appendChild(document.createTextNode(o));
-  b.onclick = () => {
-    if (k === answerIndex) {
+  b.onclick = async () => {
+    if (checking) return;                  // 等伺服器回覆時不能連按
+    checking = true;
+    let right;
+    try { right = await checkAnswer(k); }
+    catch (e) { talk("Oops! No internet. Try again!", "Oops! Try again!"); return; }
+    finally { checking = false; }
+    if (right) {
       b.classList.add("right");
       hostDo("jump");
       talk("Yay! Great job! 🎉", "Yay! Great job!");
