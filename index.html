@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>羊年 AR 英文謎題</title>
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; font-family: "Arial Rounded MT Bold", "Microsoft JhengHei", sans-serif; background:#000; }
+  #cam { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; z-index:0; }
+
+  /* 由上到下排版：上方列 → 題目對話框 → 小羊 → 選項，彼此不會重疊 */
+  #game { position:fixed; inset:0; z-index:1; display:flex; flex-direction:column; height:100vh; height:100dvh; }
+  #top { flex:none; display:flex; align-items:center; justify-content:space-between; padding:12px 16px 4px; }
+  #title { color:#fff; font-size:18px; text-shadow:0 2px 4px #000; }
+  #motion { display:none; font-size:15px; border:0; border-radius:20px; padding:8px 12px; margin-right:8px; background:#fff; color:#e65100;
+            font-weight:bold; box-shadow:0 3px 6px rgba(0,0,0,.4); font-family:inherit; }
+  #motion.show { display:inline-block; }
+  #speak { font-size:28px; border:0; border-radius:50%; width:56px; height:56px; background:#ffd54f; box-shadow:0 3px 6px rgba(0,0,0,.4); }
+
+  /* 小羊老師的對話框 */
+  #bubble { flex:none; position:relative; margin:6px auto 22px; width:min(88vw, 460px); box-sizing:border-box;
+            background:#fff; color:#333; border-radius:24px; padding:12px 18px; box-shadow:0 6px 16px rgba(0,0,0,.35);
+            text-align:center; transform:scale(0); transform-origin:50% 100%; transition:transform .25s cubic-bezier(.3,1.6,.6,1); }
+  #bubble.show { transform:scale(1); }
+  #bubble::after { content:""; position:absolute; left:50%; bottom:-18px; margin-left:-14px;
+            border:14px solid transparent; border-top:18px solid #fff; border-bottom:0; }
+  #bubble .who { font-size:16px; color:#e65100; font-weight:bold; }
+  #bubble .say { font-size:clamp(22px, 6.5vw, 30px); font-weight:bold; line-height:1.25; margin-top:2px; }
+  /* 圖片固定大小：放在固定的框裡，等比例縮放，不會撐大畫面 */
+  #bubble img { display:none; width:100%; height:min(20vh, 160px); object-fit:contain; border-radius:12px; margin:8px auto 0; }
+  #bubble img.has { display:block; }
+
+  /* 小羊區：自動填滿剩下的空間；小羊會跟著平板轉動在空間中小幅移動 */
+  #stage { flex:1 1 0; min-height:0; position:relative; perspective:900px; }
+  #sheep { position:absolute; inset:9% 12px 3%; display:flex; align-items:center; justify-content:center; gap:4px;
+           will-change:transform; }
+  .sheepbox { flex:0 1 auto; height:100%; max-height:280px; position:relative;
+              display:flex; flex-direction:column; align-items:center; justify-content:flex-end; }
+  .hop { height:90%; display:flex; align-items:flex-end; justify-content:center; transform-origin:50% 100%;
+         animation:hop 1.15s ease-in-out infinite; position:relative; z-index:1; }
+  .hop img { max-height:100%; max-width:100%; object-fit:contain; display:block; }
+  .sheepbox.flip img { transform:scaleX(-1); }
+  /* 腳下的影子：跳起來時變小變淡，讓小羊像站在地上 */
+  .shadow { position:absolute; bottom:2%; left:50%; width:62%; height:9%; margin-left:-31%; border-radius:50%;
+            background:radial-gradient(closest-side, rgba(0,0,0,.45), rgba(0,0,0,0)); animation:shadow 1.15s ease-in-out infinite; }
+  /* 跳動：起跳 → 空中 → 落地壓扁一下 */
+  @keyframes hop {
+    0%   { transform:translateY(0) scale(1.07, .93); }
+    14%  { transform:translateY(0) scale(1, 1); }
+    45%  { transform:translateY(-13%) scale(.97, 1.04); }
+    72%  { transform:translateY(0) scale(1, 1); }
+    82%  { transform:translateY(0) scale(1.05, .95); }
+    100% { transform:translateY(0) scale(1, 1); } }
+  @keyframes shadow { 0%,14%,72%,100% { transform:scale(1); opacity:1; } 45% { transform:scale(.62); opacity:.45; } }
+  #host.talk  { animation:talk .32s ease-in-out infinite alternate; transform-origin:50% 100%; }
+  #host.jump  { animation:jump .4s ease-out 2; transform-origin:50% 100%; }
+  #host.shake { animation:shakehead .24s linear 4; transform-origin:50% 100%; }
+  @keyframes talk { to { transform:scale(.96, 1.07); } }
+  @keyframes jump { 50% { transform:scale(1.2) translateY(-8%); } }
+  @keyframes shakehead { 25% { transform:rotate(-10deg); } 75% { transform:rotate(10deg); } }
+
+  #ui { flex:none; padding:12px 16px 16px; box-sizing:border-box;
+        background:linear-gradient(transparent, rgba(0,0,0,.65) 25%); color:#fff; text-align:center; }
+  #opts { display:grid; grid-auto-rows:1fr; grid-template-columns:1fr 1fr; gap:12px; }
+  .opt { font-size:clamp(18px, 5.5vw, 26px); padding:16px 8px; border:0; border-radius:18px; background:#fff; color:#333;
+         box-shadow:0 4px 0 #bbb; font-weight:bold; font-family:inherit; }
+  .opt:active { transform:translateY(3px); box-shadow:0 1px 0 #bbb; }
+  .opt.wrong { background:#ffb3b3; animation:shake .4s; }
+  .opt.right { background:#9be89b; }
+  .opt img { display:block; width:100%; height:min(11vh, 90px); margin:0 auto 4px; object-fit:contain; }
+  .opt.pic { padding:8px; }
+  @keyframes shake { 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+
+  #start, #clue { position:fixed; inset:0; z-index:5; display:flex; flex-direction:column; align-items:center;
+                  justify-content:center; background:#fff8e1; text-align:center; padding:24px; box-sizing:border-box; }
+  #start h1 { font-size:34px; color:#e65100; margin:0 0 8px; }
+  #start button, #clue button { font-size:26px; padding:16px 40px; border:0; border-radius:40px;
+                  background:#ff7043; color:#fff; font-weight:bold; margin-top:20px; font-family:inherit; }
+  #clue { display:none; background:rgba(255,248,225,.97); }
+  #clue .card { background:#fff; border:4px dashed #ff7043; border-radius:24px; padding:24px; max-width:420px; }
+  #clue .code { font-size:64px; font-weight:bold; color:#e65100; letter-spacing:6px; }
+  #clue p { font-size:22px; color:#333; }
+</style>
+</head>
+<body>
+
+<video id="cam" autoplay playsinline muted></video>
+
+<div id="start">
+  <img src="lamby.png" alt="Lamby" style="width:min(60vw,260px)">
+  <h1>Hi! I'm Lamby!</h1>
+  <p style="font-size:20px">我是小羊老師，來挑戰我的英文題目吧！</p>
+  <button id="startBtn">開始 Start</button>
+  <p id="err" style="color:#c62828"></p>
+</div>
+
+<div id="game">
+  <div id="top"><div id="title"></div><div><button id="motion">🧭 開啟動作感應</button><button id="speak" aria-label="念題目">🔊</button></div></div>
+  <div id="bubble"><div class="who">🐑 Lamby 小羊老師</div><div class="say" id="bubbleText"></div><img id="bubbleImg" alt=""></div>
+  <div id="stage"><div id="sheep"></div></div>
+  <div id="ui"><div id="opts"></div></div>
+</div>
+
+<div id="clue">
+  <div class="card">
+    <div style="font-size:60px">🎉</div>
+    <h2 style="color:#2e7d32;margin:4px 0">Great job!</h2>
+    <p id="clueLead">你拿到一組線索：</p>
+    <div class="code" id="clueCode"></div>
+    <p id="clueText"></p>
+  </div>
+  <button onclick="location.reload()">再玩一次</button>
+  <button id="backMake" style="display:none;font-size:20px;padding:10px 28px;background:#fff;color:#e65100;border:3px solid #ff7043" onclick="location.href='make.html'">✏️ 回去出題</button>
+</div>
+
+<script src="config.js"></script>
+<script>
+/* ===== 題目放在 Google 試算表（見 config.js），請用 admin.html（老師後台）新增／修改／刪除 =====
+   每一個 QR Code 對應網址 index.html?id=題號                                         */
+const params = new URLSearchParams(location.search);
+const id = params.get("id") || "1";
+let P = null;
+
+/* 同學自己出的題目：整題編在網址的 d= 參數裡（make.html 產生），不會上傳也不會存起來 */
+function decodeCustom(s) {
+  try {
+    const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+    return buildCustom(JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))));
+  } catch (e) { return null; }
+}
+// 有照片的題目放在這個分頁的暫存記憶體（sessionStorage），關掉分頁就消失
+function loadMine() {
+  try { return buildCustom(JSON.parse(sessionStorage.getItem("lambyMine"))); } catch (e) { return null; }
+}
+function buildCustom(j) {
+  try {
+    const opts = (Array.isArray(j.o) ? j.o : []).slice(0, 4).map(x => String(x).trim().slice(0, 60));
+    const a = Number(j.a), sheep = Number(j.s) || 1;
+    if (!j.q || opts.length < 2 || opts.some(x => !x) || !(a >= 0 && a < opts.length)) return null;
+    return { id, custom: true, q: String(j.q).slice(0, 200), sheep: Math.max(1, Math.min(3, sheep)),
+             image: /^data:image\/(jpeg|png);base64,[A-Za-z0-9+\/=]+$/.test(j.i || "") ? j.i : "",
+             options: opts, optionImages: [], answerIndex: a,
+             clue: { code: "🎉", text: String(j.m || "").slice(0, 100) || "你答對了同學出的題目！" } };
+  } catch (e) { return null; }
+}
+
+async function loadQuestions() {
+  if (params.get("d") || params.get("mine")) {
+    const c = params.get("mine") ? loadMine() : decodeCustom(params.get("d"));
+    if (!c) throw new Error("bad link");
+    return [c];
+  }
+  // 預覽模式：老師在後台按「預覽」時，用還沒發布的草稿
+  if (params.get("preview")) {
+    try { const d = JSON.parse(localStorage.getItem("lambyDraft") || "null"); if (d) return d; } catch (e) {}
+  }
+  // 題目放在 Google 試算表，透過 Apps Script 讀取（見 config.js）
+  const api = (window.LAMBY_CONFIG || {}).API_URL;
+  if (!api) throw new Error("no api");
+  // c = 老師代碼；舊的 QR Code 沒有 c，會讀管理者的題庫
+  const c = encodeURIComponent(params.get("c") || "");
+  const j = await (await fetch(api + "?action=questions&code=" + c + "&_=" + Date.now())).json();
+  if (!j.ok) throw new Error(j.error);
+  j.questions.forEach(q => q.remote = true);     // 雲端題目不含答案，要問伺服器
+  return j.questions;
+}
+
+/* ---------- 建立小羊（中間那隻是小羊老師 Lamby） ---------- */
+function setup() {
+const box = document.getElementById("sheep"), n = Math.max(1, Math.min(3, P.sheep || 1));
+const hostIndex = Math.floor((n - 1) / 2);
+for (let i = 0; i < n; i++) {
+  const w = document.createElement("div");
+  w.className = "sheepbox" + (i > hostIndex ? " flip" : "");
+  w.style.maxWidth = `calc(${100 / n}% - 4px)`;
+  const hop = document.createElement("div"); hop.className = "hop";
+  const sh = document.createElement("div"); sh.className = "shadow";
+  hop.style.animationDelay = sh.style.animationDelay = (i * 0.25) + "s";   // 每隻跳的節奏錯開
+  const img = document.createElement("img"); img.src = "lamby.png"; img.alt = "sheep";
+  if (i === hostIndex) img.id = "host";
+  hop.appendChild(img); w.appendChild(sh); w.appendChild(hop); box.appendChild(w);
+}
+
+/* ---------- 題目與選項 ---------- */
+document.getElementById("title").textContent = P.custom ? "🐑 同學出的題目" : "🐑 Puzzle " + id;
+if (P.custom) { document.getElementById("clueLead").textContent = "同學留給你的話："; document.getElementById("backMake").style.display = params.get("mine") ? "" : "none"; }
+if (P.image) document.getElementById("bubbleImg").src = P.image;
+const optsEl = document.getElementById("opts");
+const answerIndex = P.answerIndex ?? P.options.indexOf(P.answer);
+// 雲端題目由伺服器判斷對錯（答對才拿得到線索）；老師預覽、同學出的題目在本機判斷
+async function checkAnswer(k) {
+  if (!P.remote) return k === answerIndex;
+  const api = window.LAMBY_CONFIG.API_URL, c = encodeURIComponent(params.get("c") || "");
+  const j = await (await fetch(`${api}?action=check&code=${c}&id=${encodeURIComponent(id)}&a=${k}&_=${Date.now()}`)).json();
+  if (!j.ok) throw new Error(j.error);
+  if (j.correct) P.clue = j.clue;
+  return j.correct;
+}
+let checking = false;
+P.options.forEach((o, k) => {
+  const b = document.createElement("button");
+  b.className = "opt";
+  const im = (P.optionImages || [])[k];
+  if (im) { const i = document.createElement("img"); i.src = im; i.alt = o; b.appendChild(i); b.classList.add("pic"); }
+  if (o) b.appendChild(document.createTextNode(o));
+  b.onclick = async () => {
+    if (checking) return;                  // 等伺服器回覆時不能連按
+    checking = true;
+    let right;
+    try { right = await checkAnswer(k); }
+    catch (e) { talk("Oops! No internet. Try again!", "Oops! Try again!"); return; }
+    finally { checking = false; }
+    if (right) {
+      b.classList.add("right");
+      hostDo("jump");
+      talk("Yay! Great job! 🎉", "Yay! Great job!");
+      setTimeout(showClue, 2200);
+    } else {
+      b.classList.remove("wrong"); void b.offsetWidth; b.classList.add("wrong");
+      hostDo("shake");
+      talk("Oops! Try again! 💪", "Oops! Try again!", () => setTimeout(() => showBubble(P.q), 600));
+    }
+  };
+  optsEl.appendChild(b);
+});
+}
+
+function showClue() {
+  document.getElementById("clueCode").textContent = P.clue.code;
+  document.getElementById("clueText").textContent = P.clue.text;
+  document.getElementById("clue").style.display = "flex";
+  if (P.custom) return;                    // 同學出的題目不記錄進度
+  try {
+    const got = JSON.parse(localStorage.getItem("sheepClues") || "{}");
+    got[id] = P.clue.code; localStorage.setItem("sheepClues", JSON.stringify(got));
+  } catch (e) {}
+}
+
+/* ---------- 小羊老師說話：對話框 + 嘴巴動 + 英文語音 ---------- */
+const bubble = document.getElementById("bubble"), bubbleText = document.getElementById("bubbleText");
+function showBubble(text) {
+  bubbleText.textContent = text;
+  document.getElementById("bubbleImg").classList.toggle("has", !!(P && P.image && text === P.q));   // 題目圖片只在出題時顯示
+  bubble.classList.remove("show"); void bubble.offsetWidth; bubble.classList.add("show");
+}
+let acting = false;
+function mouthMove(on) {
+  // 說話時小羊會一伸一縮，看起來像在講話
+  const h = document.getElementById("host"); if (!h || acting) return;
+  h.classList.toggle("talk", on);
+}
+function talk(bubbleWords, voiceWords, onDone) {
+  showBubble(bubbleWords);
+  mouthMove(true);
+  let finished = false;
+  const done = () => { if (finished) return; finished = true; mouthMove(false); onDone && onDone(); };
+  setTimeout(done, 900 + voiceWords.length * 90);      // 沒有語音的裝置也會結束
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(voiceWords);
+  u.lang = "en-US"; u.rate = 0.8; u.pitch = 1.4;       // 音調高一點，像小羊
+  u.onend = done;
+  speechSynthesis.speak(u);
+}
+function hostDo(move) {
+  const h = document.getElementById("host"); if (!h) return;
+  acting = true; h.classList.remove("talk", "jump", "shake"); void h.offsetWidth; h.classList.add(move);
+  setTimeout(() => { h.classList.remove(move); acting = false; }, 1000);
+}
+// Lamby 直接念題目：emoji 不念，「___」念成 blank
+const speakable = t => t.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "").replace(/_{2,}/g, " blank ").replace(/\s+/g, " ").trim();
+function askQuestion() { talk(P.q, speakable(P.q)); }
+document.getElementById("speak").onclick = askQuestion;
+
+/* ---------- 讀取題目 ---------- */
+const startBtn = document.getElementById("startBtn"), errEl = document.getElementById("err");
+startBtn.disabled = true; startBtn.textContent = "載入中…";
+loadQuestions().then(list => {
+  P = list.find(x => String(x.id) === String(id));
+  if (!P) { startBtn.style.display = "none"; errEl.textContent = "🐑 這一題（第 " + id + " 題）已經被老師移除囉！請找其他的 QR Code。"; return; }
+  setup();
+  startBtn.disabled = false; startBtn.textContent = "開始 Start";
+}).catch(() => { startBtn.style.display = "none";
+  errEl.textContent = params.get("mine") ? "找不到你剛剛出的題目（關掉重開就會消失），請回到出題頁重新做一次。"
+    : params.get("d") ? "這個題目的連結壞掉了，請同學重新產生 QR Code。" : "題目載入失敗，請檢查網路後重新整理。"; });
+
+/* ---------- 小羊放在空間裡：平板轉動時，小羊往反方向移動（有上限，並會慢慢回到中間） ---------- */
+const World = {
+  sensor: null, base: null, x: 0, y: 0, t0: performance.now(),
+  start() {
+    window.addEventListener("deviceorientation", e => {
+      if (e.alpha == null && e.beta == null) return;
+      const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+      const land = Math.abs(ang) === 90 || ang === 270;
+      this.sensor = { yaw: e.alpha || 0, pitch: land ? (ang === 90 ? -(e.gamma || 0) : (e.gamma || 0)) : (e.beta || 0) };
+    });
+    requestAnimationFrame(() => this.tick());
+  },
+  tick() {
+    const el = document.getElementById("sheep"), stage = document.getElementById("stage");
+    const W = stage.clientWidth, H = stage.clientHeight;
+    const maxX = W * 0.15, maxY = H * 0.07, k = W / 45;          // 約 45 度視角
+    let tx = 0, ty = 0;
+    if (this.sensor) {
+      if (!this.base) this.base = { ...this.sensor };
+      let dyaw = this.sensor.yaw - this.base.yaw; dyaw = ((dyaw + 540) % 360) - 180;
+      const dpitch = this.sensor.pitch - this.base.pitch;
+      this.base.yaw += dyaw * 0.012; this.base.pitch += dpitch * 0.012;   // 停下來後慢慢回到中間
+      tx = maxX * Math.tanh(dyaw * k / maxX);                          // 不會偏離太遠
+      ty = maxY * Math.tanh(dpitch * k / maxY);
+    } else {
+      const t = (performance.now() - this.t0) / 1000;                 // 沒有感測器時：輕輕晃動
+      tx = Math.sin(t * 0.7) * W * 0.03; ty = Math.sin(t * 1.1) * H * 0.015;
+    }
+    this.x += (tx - this.x) * 0.12; this.y += (ty - this.y) * 0.12;
+    const turn = maxX ? (-this.x / maxX) * 14 : 0;                    // 移動時微微轉向，有立體感
+    el.style.transform = `translate3d(${this.x.toFixed(1)}px, ${this.y.toFixed(1)}px, 0) rotateY(${turn.toFixed(1)}deg)`;
+    requestAnimationFrame(() => this.tick());
+  }
+};
+
+/* ---------- 動作感應權限：沒收到資料時顯示按鈕讓學生再按一次 ---------- */
+async function askMotion() {
+  if (typeof DeviceOrientationEvent !== "undefined" && DeviceOrientationEvent.requestPermission) {
+    try { return await DeviceOrientationEvent.requestPermission(); } catch (e) { return "error"; }
+  }
+  return "not-needed";
+}
+const motionBtn = document.getElementById("motion");
+motionBtn.onclick = async () => {
+  const r = await askMotion();
+  if (r === "denied") alert("動作感應被拒絕了。\n請把 Safari 全部分頁關掉再重新掃描，或到「設定 → Safari → 清除瀏覽紀錄和網站資料」後再試。");
+  setTimeout(checkMotion, 1500);
+};
+function checkMotion() { motionBtn.classList.toggle("show", !World.sensor); }
+
+/* ---------- 開啟後鏡頭（需要 HTTPS） ---------- */
+document.getElementById("startBtn").onclick = async () => {
+  // iPad / iPhone 要先允許「動作與方向」才能讀到平板轉動
+  await askMotion();
+  World.start();
+  setTimeout(checkMotion, 2000);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    document.getElementById("cam").srcObject = stream;
+    document.getElementById("start").style.display = "none";
+    // 小羊老師先打招呼，再出題
+    setTimeout(() => talk("Hi! I'm Lamby! 👋", "Hi! I'm Lamby! Let's play!", () => setTimeout(askQuestion, 400)), 500);
+  } catch (e) {
+    document.getElementById("err").textContent = "無法開啟相機：請確認網址是 https，並允許相機權限。";
+  }
+};
+</script>
+</body>
+</html>

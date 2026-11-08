@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Lamby 老師後台</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="config.js"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+  :root { --o:#ff7043; --od:#e65100; --bg:#fff8e1; --line:#f0e0c0; --g:#2e7d32; --r:#c62828; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Microsoft JhengHei","PingFang TC",sans-serif; background:var(--bg); color:#333; }
+  header { background:#fff; border-bottom:3px solid var(--line); padding:12px 16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; position:sticky; top:0; z-index:5; }
+  header img { width:48px; }
+  header h1 { font-size:20px; margin:0; color:var(--od); flex:1; min-width:160px; }
+  main { max-width:860px; margin:0 auto; padding:16px; }
+  button { font-family:inherit; font-size:15px; border:0; border-radius:10px; padding:8px 14px; cursor:pointer; background:#eee; color:#333; }
+  button.primary { background:var(--o); color:#fff; font-weight:bold; }
+  button.green { background:var(--g); color:#fff; font-weight:bold; }
+  button.danger { background:#fdecea; color:var(--r); }
+  button:disabled { opacity:.5; cursor:default; }
+  .panel { background:#fff; border:2px solid var(--line); border-radius:16px; padding:16px; margin-bottom:16px; }
+  .status { padding:10px 14px; border-radius:10px; margin-bottom:16px; display:none; }
+  .status.show { display:block; }
+  .status.ok { background:#e8f5e9; color:var(--g); }
+  .status.err { background:#fdecea; color:var(--r); }
+  .status.info { background:#fff3e0; color:var(--od); }
+  .badge { background:var(--r); color:#fff; border-radius:20px; font-size:12px; padding:2px 8px; margin-left:6px; display:none; }
+  .badge.show { display:inline; }
+  .q { display:flex; gap:12px; align-items:flex-start; }
+  .q .qr { flex:none; text-align:center; font-size:12px; color:#999; }
+  .q .qr div { width:96px; height:96px; }
+  .q .qr img, .q .qr canvas { width:96px !important; height:96px !important; }
+  .q .num { flex:none; width:54px; height:54px; border-radius:50%; background:var(--o); color:#fff; font-weight:bold; font-size:20px; display:flex; align-items:center; justify-content:center; }
+  .q .body { flex:1; min-width:0; }
+  .q .title { font-size:20px; font-weight:bold; word-break:break-word; }
+  .q .opts { margin:6px 0; display:flex; flex-wrap:wrap; gap:6px; }
+  .q .opts span { background:#f5f5f5; border-radius:8px; padding:3px 10px; }
+  .q .opts span.ans { background:#c8e6c9; font-weight:bold; }
+  .q .clue { color:#666; font-size:14px; }
+  .q .act { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  label { display:block; font-weight:bold; margin:14px 0 6px; }
+  label small { font-weight:normal; color:#888; }
+  input[type=text], input[type=password], textarea, select { width:100%; font-size:17px; padding:10px; border:2px solid var(--line); border-radius:10px; font-family:inherit; }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:var(--o); }
+  .optrow { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .optrow input[type=radio] { width:24px; height:24px; accent-color:var(--g); flex:none; }
+  .optrow input[type=text] { flex:1; }
+  .imgpick { display:flex; align-items:center; gap:8px; flex:none; }
+  .imgpick img { width:56px; height:56px; object-fit:contain; border:2px solid var(--line); border-radius:8px; background:#fafafa; display:none; }
+  .imgpick img.has { display:block; }
+  .imgpick .x { display:none; padding:6px 9px; }
+  .imgpick .kb { font-size:12px; color:var(--g); white-space:nowrap; }
+  .imgpick.has .x { display:inline-block; }
+  .qimg .imgpick img { width:120px; height:90px; }
+  .q .opts span img { height:34px; vertical-align:middle; margin-right:4px; }
+  .q .qpic { max-height:80px; max-width:160px; border-radius:8px; margin-top:6px; display:block; }
+  .row2 { display:grid; grid-template-columns:1fr 2fr; gap:12px; }
+  #editor { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:flex-start; justify-content:center; z-index:10; overflow:auto; padding:20px 12px; }
+  #editor.show { display:flex; }
+  #editor .panel { width:100%; max-width:600px; margin:0; }
+  #editor h2 { margin:0; color:var(--od); }
+  .foot { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; flex-wrap:wrap; }
+  details summary { cursor:pointer; font-weight:bold; color:var(--od); }
+  details ol { line-height:1.9; padding-left:22px; }
+  code { background:#f5f5f5; padding:1px 6px; border-radius:4px; }
+  .empty { text-align:center; color:#999; padding:30px; }
+  .who { font-size:13px; color:#888; }
+  .tools { display:contents; }
+  body:not(.linked) .tools, body:not(.linked) .authonly, body:not(.linked) #list { display:none; }
+  body.authed #loginBox { display:none; }
+  @media (max-width:560px) { .q .qr { display:none; } .row2 { grid-template-columns:1fr; } .q .num { width:42px; height:42px; font-size:16px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="lamby.png" alt="">
+  <h1>Lamby 老師後台<span class="badge" id="dirty">尚未儲存</span></h1>
+  <span class="who" id="who"></span>
+  <span class="tools">
+    <button class="primary" onclick="openEditor(null)">＋ 新增題目</button>
+    <button onclick="compact()">🔢 重新編號</button>
+    <button onclick="openQR()">🖨 列印 QR Code</button>
+    <button onclick="reloadList()">🔄 重新載入</button>
+    <button onclick="cleanupImages()" title="把沒用到的圖片移到管理者 Drive 的「_回收區」資料夾（不會刪除）">🧹 整理圖片</button>
+    <button class="green" id="publishBtn" onclick="publish()">💾 儲存到雲端</button>
+    <button onclick="logout()">登出</button>
+  </span>
+</header>
+
+<main>
+  <div class="status" id="status"></div>
+
+  <div class="panel" id="loginBox">
+    <h2 style="margin-top:0;color:var(--od)">請用 Google 帳號登入</h2>
+    <p>只有管理者加入名單的帳號可以使用後台。若顯示「沒有使用權限」，請把你的 Gmail 告訴管理者。</p>
+    <p style="color:#888;font-size:14px">登入只會讓網站知道你的 email，不會存取你的 Google Drive 或其他資料。</p>
+    <div id="gbtn"></div>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="panel authonly" style="font-size:14px;color:#666">
+    💡 小提醒：題號固定不變，刪除題目不會影響其他題的 QR Code。
+    新增題目後，按上方「🖨 列印 QR Code」印出新題目的 QR Code。
+    題目和圖片都由管理者統一保管，不會用到你自己的 Google Drive；按「儲存到雲端」後，學生端約 1 分鐘內更新。
+  </div>
+</main>
+
+<!-- 編輯視窗 -->
+<div id="editor" onclick="if(event.target===this)closeEditor()">
+  <div class="panel">
+    <h2 id="edTitle">新增題目</h2>
+
+    <label>題號 <small>QR Code 會對應這個號碼；改題號後要重印 QR Code</small></label>
+    <input type="text" id="f_id" inputmode="numeric" style="width:120px">
+
+    <label>題目 <small>顯示在 Lamby 的對話框，Lamby 也會念出來；可加 emoji（emoji 不會被念出來）</small></label>
+    <input type="text" id="f_q" placeholder="例如：How many sheep?">
+
+    <label>題目圖片 <small>選填，會出現在 Lamby 的對話框裡；系統會自動壓縮並固定顯示大小</small></label>
+    <div class="qimg" id="f_qimg"></div>
+
+
+    <label>畫面上出現幾隻羊 <small>數數題會用到</small></label>
+    <select id="f_sheep"><option value="1">1 隻</option><option value="2">2 隻</option><option value="3">3 隻</option></select>
+
+    <label>選項 <small>點左邊圓圈選出正確答案；選項 2～4 個；每個選項可以只放文字、只放圖片，或兩個都放</small></label>
+    <div id="f_opts"></div>
+
+    <div class="row2">
+      <div><label>線索代碼</label><input type="text" id="f_code" placeholder="例如：S"></div>
+      <div><label>線索說明</label><input type="text" id="f_text" placeholder="例如：去找 2 號 QR Code！"></div>
+    </div>
+
+    <div class="foot">
+      <button onclick="closeEditor()">取消</button>
+      <button class="primary" onclick="saveEditor()">儲存這題</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let questions = [], version = null, dirty = false, editingId = null;
+const CFG = window.LAMBY_CONFIG || {};
+
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+function sstore(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { return null; } }
+
+/* ---------- Google 登入 ---------- */
+// ID Token 只放在這個分頁的 sessionStorage，關掉分頁就消失；約 1 小時後過期
+let idToken = sstore("lamby_idtoken") || "";
+const tokenExp = t => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp * 1000; } catch (e) { return 0; } };
+const tokenValid = () => idToken && tokenExp(idToken) > Date.now() + 60 * 1000;
+let me = null;   // { email, name, code }
+function setAuthed(v, info) {
+  me = v ? info : null;
+  document.body.classList.toggle("authed", v);
+  document.body.classList.toggle("linked", v);
+  $("who").textContent = v ? `👤 ${info.email}（代碼 ${info.code}）` : "";
+}
+function initGoogle() {
+  if (!CFG.API_URL || !CFG.GOOGLE_CLIENT_ID) return msg("err", "還沒有設定 config.js 的 API_URL 和 GOOGLE_CLIENT_ID。");
+  if (!window.google?.accounts?.id) return setTimeout(initGoogle, 200);     // 等 Google 登入元件載入
+  google.accounts.id.initialize({ client_id: CFG.GOOGLE_CLIENT_ID, callback: onCredential, auto_select: true });
+  google.accounts.id.renderButton($("gbtn"), { theme: "filled_blue", size: "large", text: "signin_with", locale: "zh-TW" });
+  if (tokenValid()) whoami(); else google.accounts.id.prompt();
+}
+function onCredential(res) { idToken = res.credential; sstore("lamby_idtoken", idToken); whoami(); }
+async function whoami() {
+  try {
+    const info = await api("whoami");
+    setAuthed(true, info);
+    if (dirty) msg("ok", "已重新登入，請再按一次「💾 儲存到雲端」。");
+    else load();
+  } catch (e) { /* api() 已顯示錯誤 */ }
+}
+
+/* ---------- 整理圖片：沒用到的圖片「移到」管理者 Drive 的「_回收區」，不刪除（儲存時也會自動整理） ---------- */
+async function cleanupImages() {
+  if (dirty) return msg("err", "請先按「💾 儲存到雲端」再整理圖片，以免誤把還在用的圖片移走。");
+  msg("info", "整理圖片中…");
+  try {
+    const j = await api("cleanup");
+    msg("ok", j.moved ? `🧹 已把 ${j.moved} 張沒用到的圖片移到回收區（沒有刪除，管理者可以找回來）。` : "圖片都有在使用，沒有需要整理的。");
+  } catch (e) { /* api() 已顯示錯誤 */ }
+}
+
+/** 圖片交給後端上傳到管理者的 Drive，回傳學生看得到的圖片網址 */
+async function uploadImage(dataUrl) { return (await api("upload", { data: dataUrl })).url; }
+function logout() {
+  if (dirty && !confirm("還有修改沒有儲存，確定要登出嗎？")) return;
+  idToken = ""; sstore("lamby_idtoken", null);
+  questions = []; setDirty(false); render();
+  google.accounts.id.disableAutoSelect();
+  setAuthed(false); msg("info", "已登出。");
+}
+
+/* ---------- 呼叫 Apps Script 後端 ---------- */
+// 用 text/plain 送出，避免瀏覽器先送 CORS 預檢（Apps Script 不支援）
+async function api(action, data = {}) {
+  if (!tokenValid()) { needLogin("登入已過期，請重新登入（你的修改還在，不會不見）。"); throw new Error("auth"); }
+  let j;
+  try {
+    const r = await fetch(CFG.API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+                                         body: JSON.stringify({ action, idToken, ...data }) });
+    j = await r.json();
+  } catch (e) { msg("err", "連不上雲端，請檢查網路後再試一次。"); throw e; }
+  if (!j.ok) {
+    if (j.code === "auth" || j.code === "forbidden") needLogin(j.error, j.code === "forbidden");
+    else msg("err", j.error);
+    const err = new Error(j.error); err.code = j.code; throw err;
+  }
+  return j;
+}
+function needLogin(text, forbidden) {
+  idToken = ""; sstore("lamby_idtoken", null);
+  if (forbidden) { setAuthed(false); google.accounts.id.disableAutoSelect(); }
+  else if (!dirty) setAuthed(false);
+  msg("err", text);
+  if (!forbidden) { const b = document.createElement("div"); b.style.marginTop = "8px"; $("status").appendChild(b);
+    google.accounts.id.renderButton(b, { theme: "outline", size: "medium", text: "signin_with", locale: "zh-TW" }); }
+}
+
+function msg(type, text) { const s = $("status"); s.className = "status show " + type; s.textContent = text; }
+function setDirty(v) {
+  dirty = v; $("dirty").classList.toggle("show", v);
+  store("lambyDraft", JSON.stringify(questions));       // 預覽用的草稿
+}
+window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ---------- 讀取題目（Google 試算表） ---------- */
+async function load() {
+  msg("info", "讀取題目中…");
+  try {
+    const j = await api("list");
+    questions = j.questions; version = j.version;
+    sortQ(); setDirty(false); render();
+    msg("ok", "已讀取 " + questions.length + " 題。修改完記得按「💾 儲存到雲端」。");
+  } catch (e) { /* api() 已顯示錯誤 */ }
+}
+function reloadList() {
+  if (dirty && !confirm("重新載入會放棄還沒儲存的修改，確定嗎？")) return;
+  load();
+}
+
+/* ---------- 題目列表 ---------- */
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+function render() {
+  const el = $("list");
+  if (!questions.length) { el.innerHTML = '<div class="panel empty">還沒有題目，按右上角「＋ 新增題目」開始。</div>'; return; }
+  el.innerHTML = questions.map((q, i) => `
+    <div class="panel q">
+      <div class="num">${esc(q.id)}</div>
+      <div class="body">
+        <div class="title">${esc(q.q)}</div>
+        ${q.image ? `<img class="qpic" src="${esc(q.image)}" alt="">` : ""}
+        <div class="opts">${q.options.map((o, k) => { const ok = k === ansIdx(q), im = (q.optionImages || [])[k];
+          return `<span class="${ok ? "ans" : ""}">${ok ? "✔ " : ""}${im ? `<img src="${esc(im)}" alt="">` : ""}${esc(o)}</span>`; }).join("")}</div>
+        <div class="clue">🐑 ×${q.sheep || 1}　｜　🔑 線索：<b>${esc(q.clue?.code)}</b>　${esc(q.clue?.text)}</div>
+        <div class="act">
+          <button onclick="openEditor(${q.id})">✏️ 編輯</button>
+          <button onclick="preview(${q.id})">👀 預覽</button>
+          <button onclick="move(${i},-1)" ${i === 0 ? "disabled" : ""} title="和上一題交換題號">↑</button>
+          <button onclick="move(${i},1)" ${i === questions.length - 1 ? "disabled" : ""} title="和下一題交換題號">↓</button>
+          <button onclick="openQR(${q.id})">🖨 印這題</button>
+          <button class="danger" onclick="removeQ(${q.id})">🗑 刪除</button>
+        </div>
+      </div>
+      <div class="qr"><div id="qr_${q.id}"></div>第 ${esc(q.id)} 題</div>
+    </div>`).join("");
+  questions.forEach(q => { if (window.QRCode) new QRCode($("qr_" + q.id), { text: gameUrl(q.id), width: 192, height: 192 }); });
+}
+// 學生網址帶老師代碼 c，網站才知道要讀哪位老師的題庫
+const gameUrl = id => location.href.replace(/admin\.html.*$/, "index.html") + "?c=" + me.code + "&id=" + id;
+function openQR(only) {
+  store("lambyDraft", JSON.stringify(questions));
+  window.open("qrcodes.html?draft=1&c=" + me.code + (only ? "&only=" + only : ""), "_blank");
+}
+/* ---------- 題號：交換、遞補、重新編號 ---------- */
+// map = { 舊題號: 新題號 }。會一起更新所有線索裡的「N 號」
+function applyIdMap(map, note) {
+  const changed = Object.keys(map).filter(k => +k !== map[k]);
+  if (!changed.length) { msg("info", "題號沒有變動。"); return; }
+  questions.forEach(q => {
+    if (q.clue?.text) q.clue.text = q.clue.text.replace(/(\d+)(\s*號)/g, (m, n, tail) => (n in map ? map[n] : n) + tail);
+  });
+  questions.forEach(q => { if (q.id in map) q.id = map[q.id]; });
+  sortQ(); setDirty(true); render();
+  const newIds = changed.map(k => map[k]).sort((a, b) => a - b);
+  msg("err", (note ? note + " " : "") + `題號已更新：${changed.map(k => k + "→" + map[k]).join("、")}。線索裡的「N 號」也已自動更新。`
+      + `⚠️ 儲存後請重印第 ${newIds.join("、")} 題的 QR Code（舊的 QR Code 會對應到不同題目）。`);
+  showReprint(newIds);
+}
+function showReprint(ids) {
+  const b = document.createElement("button"); b.className = "primary"; b.style.marginLeft = "10px";
+  b.textContent = "🖨 印這些 QR Code"; b.onclick = () => openQR(ids.join(","));
+  $("status").appendChild(b);
+}
+const sortQ = () => questions.sort((a, b) => a.id - b.id);
+function move(i, d) {
+  const a = questions[i], b = questions[i + d];
+  applyIdMap({ [a.id]: b.id, [b.id]: a.id });
+}
+function compact() {
+  const map = {}; questions.forEach((q, i) => map[q.id] = i + 1);
+  if (!Object.keys(map).some(k => +k !== map[k])) return msg("ok", "題號已經是 1 到 " + questions.length + " 連續的，不需要重新編號。");
+  if (!confirm("要把題號重新編成 1、2、3…連續的號碼嗎？\n有變動的題目要重印 QR Code。")) return;
+  applyIdMap(map);
+}
+function removeQ(id) {
+  const q = questions.find(x => x.id === id);
+  if (!confirm(`確定要刪除第 ${id} 題「${q.q}」嗎？`)) return;
+  questions = questions.filter(x => x.id !== id); setDirty(true); render();
+  const later = questions.filter(x => x.id > id);
+  if (later.length && confirm(`要讓後面的題目自動往前遞補嗎？\n（第 ${later.map(x => x.id).join("、")} 題會各減 1，這些題目要重印 QR Code）`)) {
+    const map = {}; later.forEach(x => map[x.id] = x.id - 1);
+    return applyIdMap(map, `已刪除第 ${id} 題（還沒儲存）。`);
+  }
+  // 檢查有沒有其他題目的線索還叫學生去找這一題
+  const refs = questions.filter(x => new RegExp("(^|[^0-9])" + id + "\\s*號").test(x.clue?.text || "")).map(x => x.id);
+  msg(refs.length ? "err" : "info", `已刪除第 ${id} 題（還沒儲存）。已經印好的第 ${id} 號 QR Code 會失效，請記得收回。`
+      + (refs.length ? `⚠️ 第 ${refs.join("、")} 題的線索還寫著「${id} 號」，請記得編輯修改。` : ""));
+}
+function preview(id) { store("lambyDraft", JSON.stringify(questions)); window.open(`index.html?c=${me.code}&id=${id}&preview=1`, "_blank"); }
+
+/* ---------- 圖片：選圖、自動縮小 ---------- */
+const ansIdx = q => (q.answerIndex ?? q.options.indexOf(q.answer));
+// 壓縮規則：最長邊 480px；一般照片存 JPEG（品質 0.75）；有透明背景才存 PNG。
+// 壓縮後超過 150KB 會再縮小一次，確保學生平板讀取快。
+const IMG_MAX = 480, IMG_LIMIT = 150 * 1024;
+const dataSize = d => Math.round((d.length - d.indexOf(",") - 1) * 3 / 4);
+function resizeImage(file, max = IMG_MAX) {
+  return new Promise((ok, fail) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      const g = c.getContext("2d"); g.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      // 有透明背景就存 PNG，否則存 JPEG（檔案比較小）
+      const px = g.getImageData(0, 0, c.width, c.height).data; let alpha = false;
+      for (let i = 3; i < px.length; i += 16) if (px[i] < 250) { alpha = true; break; }
+      const out = alpha ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.75);
+      if (dataSize(out) > IMG_LIMIT && max > 200) return resizeImage(file, Math.round(max * 0.75)).then(ok, fail);
+      ok(out);
+    };
+    img.onerror = () => fail(new Error("這個檔案不是圖片"));
+    img.src = url;
+  });
+}
+function imgPicker(src) {
+  const w = document.createElement("div"); w.className = "imgpick";
+  w.innerHTML = `<img alt=""><button type="button" class="pick">📷 圖片</button><button type="button" class="x danger" title="移除圖片">✕</button><span class="kb"></span><input type="file" accept="image/*" hidden>`;
+  const im = w.querySelector("img"), fi = w.querySelector("input"), kb = w.querySelector(".kb");
+  const set = v => { w.dataset.src = v || ""; im.src = v || ""; im.classList.toggle("has", !!v); w.classList.toggle("has", !!v);
+                     kb.textContent = v && v.startsWith("data:") ? "已壓縮 " + Math.ceil(dataSize(v) / 1024) + " KB" : ""; };
+  set(src);
+  w.querySelector(".pick").onclick = () => fi.click();
+  w.querySelector(".x").onclick = () => set("");
+  fi.onchange = async () => { if (!fi.files[0]) return; try { set(await resizeImage(fi.files[0])); } catch (e) { alert(e.message); } fi.value = ""; };
+  return w;
+}
+
+/* ---------- 編輯視窗 ---------- */
+function optRow(text, checked, img) {
+  const d = document.createElement("div"); d.className = "optrow";
+  d.innerHTML = `<input type="radio" name="ans" ${checked ? "checked" : ""} title="正確答案"><input type="text" placeholder="選項文字">`;
+  d.querySelector("input[type=text]").value = text || "";
+  d.appendChild(imgPicker(img));
+  return d;
+}
+function openEditor(id) {
+  editingId = id;
+  const q = id == null ? { q: "", say: "", sheep: 1, options: ["", "", "", ""], answer: "", clue: { code: "", text: "" } }
+                       : questions.find(x => x.id === id);
+  $("edTitle").textContent = id == null ? "新增題目" : `編輯第 ${id} 題`;
+  $("f_id").value = id == null ? questions.reduce((m, x) => Math.max(m, x.id), 0) + 1 : id;
+  $("f_q").value = q.q;
+  $("f_sheep").value = String(q.sheep || 1);
+  const box = $("f_opts"); box.innerHTML = "";
+  const ai = ansIdx(q), imgs = q.optionImages || [];
+  for (let i = 0; i < 4; i++) box.appendChild(optRow(q.options[i] || "", i < q.options.length && i === ai, imgs[i] || ""));
+  $("f_qimg").innerHTML = ""; $("f_qimg").appendChild(imgPicker(q.image || ""));
+  $("f_code").value = q.clue?.code || ""; $("f_text").value = q.clue?.text || "";
+  $("editor").classList.add("show"); $("f_q").focus();
+}
+function closeEditor() { $("editor").classList.remove("show"); }
+function saveEditor() {
+  const rows = [...$("f_opts").children];
+  const opts = [], imgs = []; let answerIndex = -1;
+  rows.forEach(r => {
+    const t = r.querySelector("input[type=text]").value.trim(), im = r.querySelector(".imgpick").dataset.src || "";
+    if (!t && !im) return;                                  // 空白的選項略過
+    if (r.querySelector("input[type=radio]").checked) answerIndex = opts.length;
+    opts.push(t); imgs.push(im);
+  });
+  const qText = $("f_q").value.trim();
+  if (!qText) return alert("請輸入題目。");
+  if (opts.length < 2) return alert("至少要有 2 個選項（文字或圖片都可以）。");
+  const keys = opts.map((t, i) => t + "|" + imgs[i]);
+  if (new Set(keys).size !== keys.length) return alert("選項不能重複。");
+  if (answerIndex < 0) return alert("請點選項左邊的圓圈，選出正確答案。");
+  const newId = parseInt($("f_id").value, 10);
+  if (!(newId >= 1) || String(newId) !== $("f_id").value.trim()) return alert("題號要是 1 以上的整數。");
+  if (questions.some(x => x.id === newId && x.id !== editingId)) return alert(`第 ${newId} 題已經存在，請換一個題號，或先用 ↑↓ 交換。`);
+  const data = { q: qText, sheep: +$("f_sheep").value,
+                 image: $("f_qimg").querySelector(".imgpick").dataset.src || "",
+                 options: opts, optionImages: imgs.some(Boolean) ? imgs : [], answerIndex,
+                 answer: opts[answerIndex] || ("圖片 " + (answerIndex + 1)), clue: { code: $("f_code").value.trim(), text: $("f_text").value.trim() } };
+  if (editingId == null) {
+    questions.push({ id: newId, ...data }); sortQ();
+    msg("info", `已新增第 ${newId} 題（還沒儲存）。儲存後記得印第 ${newId} 號 QR Code。`);
+    showReprint([newId]);
+  } else {
+    const t = questions.find(x => x.id === editingId); delete t.say; Object.assign(t, data);
+    closeEditor();
+    if (newId !== editingId) return applyIdMap({ [editingId]: newId }, `已修改第 ${editingId} 題（還沒儲存）。`);
+    msg("info", `已修改第 ${editingId} 題（還沒儲存）。`);
+  }
+  setDirty(true); render(); closeEditor();
+}
+
+/* ---------- 儲存到雲端（圖片 → Google Drive，題目 → Google 試算表） ---------- */
+async function publish() {
+  if (!dirty && !confirm("目前沒有新的修改，還是要儲存嗎？")) return;
+  $("publishBtn").disabled = true;
+  try {
+    // 1. 新選的圖片（還是 data: 格式）先上傳，換成圖片網址
+    const pending = new Set();
+    questions.forEach(q => { if (q.image?.startsWith("data:")) pending.add(q.image); (q.optionImages || []).forEach(x => x?.startsWith("data:") && pending.add(x)); });
+    let n = 0;
+    for (const dataUrl of pending) {
+      msg("info", `上傳圖片… (${++n}/${pending.size})`);
+      const url = await uploadImage(dataUrl);
+      // 每傳完一張就換掉，中途失敗時已上傳的圖片不會重複上傳
+      questions.forEach(q => {
+        if (q.image === dataUrl) q.image = url;
+        if (q.optionImages) q.optionImages = q.optionImages.map(x => x === dataUrl ? url : x);
+      });
+    }
+    // 2. 整份題目寫進試算表；如果別的老師在這之間改過，後端會拒絕，避免互相蓋掉
+    msg("info", "儲存題目到 Google 試算表…");
+    const j = await api("save", { questions, baseVersion: version });
+    questions = j.questions; version = j.version;
+    sortQ(); setDirty(false); render();
+    msg("ok", "✅ 儲存成功！學生端約 1 分鐘內會看到新題目。" + (j.cleaned ? `（另外把 ${j.cleaned} 張沒用到的圖片移到回收區）` : ""));
+  } catch (e) {
+    if (e.code === "conflict") { const b = document.createElement("button"); b.textContent = "🔄 重新載入"; b.style.marginLeft = "10px";
+      b.onclick = reloadList; $("status").appendChild(b); }
+  }
+  $("publishBtn").disabled = false;
+}
+
+initGoogle();
+</script>
+</body>
+</html>
