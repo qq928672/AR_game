@@ -67,6 +67,8 @@
   .opt:active { transform:translateY(3px); box-shadow:0 1px 0 #bbb; }
   .opt.wrong { background:#ffb3b3; animation:shake .4s; }
   .opt.right { background:#9be89b; }
+  .opt:disabled { color:#333; }
+  .opt.wrong:disabled { opacity:.55; }
   .opt img { display:block; width:100%; height:min(11vh, 90px); margin:0 auto 4px; object-fit:contain; }
   .opt.pic { padding:8px; }
   @keyframes shake { 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
@@ -188,15 +190,25 @@ if (P.image) document.getElementById("bubbleImg").src = P.image;
 const optsEl = document.getElementById("opts");
 const answerIndex = P.answerIndex ?? P.options.indexOf(P.answer);
 // 雲端題目由伺服器判斷對錯（答對才拿得到線索）；老師預覽、同學出的題目在本機判斷
+const api = (window.LAMBY_CONFIG || {}).API_URL, codeQ = encodeURIComponent(params.get("c") || "");
+// 雲端題目：一進到題目就在背景先取得「這一題」的答案，按選項時馬上有反應
+let known = null;
+if (P.remote) {
+  fetch(`${api}?action=answer&code=${codeQ}&id=${encodeURIComponent(id)}&_=${Date.now()}`)
+    .then(r => r.json()).then(j => { if (j.ok) known = { a: j.answerIndex, clue: j.clue }; }).catch(() => {});
+}
 async function checkAnswer(k) {
   if (!P.remote) return k === answerIndex;
-  const api = window.LAMBY_CONFIG.API_URL, c = encodeURIComponent(params.get("c") || "");
-  const j = await (await fetch(`${api}?action=check&code=${c}&id=${encodeURIComponent(id)}&a=${k}&_=${Date.now()}`)).json();
+  if (known) { if (k === known.a) P.clue = known.clue; return k === known.a; }
+  // 還沒預先載入完成（網路慢）：直接問伺服器
+  const j = await (await fetch(`${api}?action=check&code=${codeQ}&id=${encodeURIComponent(id)}&a=${k}&_=${Date.now()}`)).json();
   if (!j.ok) throw new Error(j.error);
   if (j.correct) P.clue = j.clue;
   return j.correct;
 }
-let checking = false;
+// 避免連按：每次作答後鎖住所有選項，等 Lamby 說完才能再按；答錯的選項不能再選，答對後全部鎖住
+let busy = false;
+const buttons = [];
 P.options.forEach((o, k) => {
   const b = document.createElement("button");
   b.className = "opt";
@@ -204,23 +216,26 @@ P.options.forEach((o, k) => {
   if (im) { const i = document.createElement("img"); i.src = im; i.alt = o; b.appendChild(i); b.classList.add("pic"); }
   if (o) b.appendChild(document.createTextNode(o));
   b.onclick = async () => {
-    if (checking) return;                  // 等伺服器回覆時不能連按
-    checking = true;
+    if (busy || b.disabled) return;
+    busy = true;
+    if (P.remote && !known) showBubble("Hmm... 🤔");     // 要等伺服器時先給反應
     let right;
     try { right = await checkAnswer(k); }
-    catch (e) { talk("Oops! No internet. Try again!", "Oops! Try again!"); return; }
-    finally { checking = false; }
+    catch (e) { talk("Oops! No internet. Try again!", "Oops! Try again!", () => { busy = false; }); return; }
     if (right) {
       b.classList.add("right");
+      buttons.forEach(x => x.disabled = true);           // 答對了，不能再按
       hostDo("jump");
       talk("Yay! Great job! 🎉", "Yay! Great job!");
       setTimeout(showClue, 2200);
     } else {
       b.classList.remove("wrong"); void b.offsetWidth; b.classList.add("wrong");
+      b.disabled = true;                                  // 答錯的選項不能再選
       hostDo("shake");
-      talk("Oops! Try again! 💪", "Oops! Try again!", () => setTimeout(() => showBubble(P.q), 600));
+      talk("Oops! Try again! 💪", "Oops! Try again!", () => { busy = false; setTimeout(() => showBubble(P.q), 600); });
     }
   };
+  buttons.push(b);
   optsEl.appendChild(b);
 });
 }
