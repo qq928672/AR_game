@@ -62,6 +62,9 @@
   #ui { flex:none; padding:12px 16px 16px; box-sizing:border-box;
         background:linear-gradient(transparent, rgba(0,0,0,.65) 25%); color:#fff; text-align:center; }
   #opts { display:grid; grid-auto-rows:1fr; grid-template-columns:1fr 1fr; gap:12px; }
+  /* 題目出現前先藏起選項（保留位置，畫面不會跳動），出題時才淡入 */
+  #opts { visibility:hidden; opacity:0; transform:translateY(12px); transition:opacity .35s, transform .35s, visibility 0s .35s; }
+  #opts.show { visibility:visible; opacity:1; transform:none; transition:opacity .35s, transform .35s; }
   .opt { font-size:clamp(18px, 5.5vw, 26px); padding:16px 8px; border:0; border-radius:18px; background:#fff; color:#333;
          box-shadow:0 4px 0 #bbb; font-weight:bold; font-family:inherit; }
   .opt:active { transform:translateY(3px); box-shadow:0 1px 0 #bbb; }
@@ -284,7 +287,10 @@ function hostDo(move) {
 }
 // Lamby 直接念題目：emoji 不念，「___」念成 blank
 const speakable = t => t.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "").replace(/_{2,}/g, " blank ").replace(/\s+/g, " ").trim();
-function askQuestion() { talk(P.q, speakable(P.q)); }
+function askQuestion() {
+  talk(P.q, speakable(P.q));
+  document.getElementById("opts").classList.add("show");   // 題目出現了，選項才出現
+}
 document.getElementById("speak").onclick = askQuestion;
 
 /* ---------- 讀取題目 ---------- */
